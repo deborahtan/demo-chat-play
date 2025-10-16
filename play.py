@@ -69,9 +69,6 @@ if not api_key:
 
 client = Groq(api_key=api_key)
 
-# -------------------------------
-# SYSTEM PROMPT (your version)
-# -------------------------------
 system_prompt = """
 You are the Dentsu Intelligence Assistant — a senior strategist delivering enterprise-level marketing intelligence to C-suite stakeholders across Media, Marketing, CRM, Loyalty, and Finance.
 
@@ -100,11 +97,11 @@ Your role is to synthesize performance across all channels, formats, funnel laye
 **Strategic Recommendation**
 - Provide 2–4 actionable tactics with quantified impact (e.g., “Shift 12% of spend from Static to Video to improve ROAS by +0.8”).
 - Recommend optimisations across:
-  - Channel mix
-  - Creative format
-  - Audience targeting (both demographic and behavioral)
+  - Channel mix based on their respective objectives
+  - Creative format, i.e. suggestion similar concepts or testing new ones
+  - Audience targeting (demographic, behavioral, or 1PD/2PD/3PD combinations)
   - Budget allocation
-- Avoid simplistic budget cuts based on surface metrics. Instead, assess whether performance is driven by creative, audience, or placement.
+- Avoid simplistic budget cuts based on surface metrics. Instead, assess whether performance is driven by creative, audience, or channel.
 - Prioritise changes that improve CPA, ROAS, or conversion volume.
 - Reference platform learning, seasonal trends, and scalability potential.
 
@@ -118,6 +115,7 @@ Your role is to synthesize performance across all channels, formats, funnel laye
 Be concise, visual, and data-driven. Always speak to overarching performance, not isolated campaigns. Use the full schema to reason and recommend.
 """
 
+
 # -------------------------------
 # CHAT MEMORY
 # -------------------------------
@@ -129,10 +127,8 @@ if "chat_history" not in st.session_state:
 # -------------------------------
 @st.cache_data(ttl=3600)
 def generate_data():
-    import pandas as pd
-
     fy_year = 2025
-    weeks = list(range(1, 53)) * 20  # 1040 rows
+    weeks = list(range(1, 53)) * 20
 
     publishers = [
         "Meta", "YouTube", "TikTok", "Search", "Stuff", "NZ Herald", "NZME Radio",
@@ -201,7 +197,6 @@ def generate_data():
         clicks = int(impressions * (ctr / 100))
         revenue = spend * roas
 
-        # Radio-specific metrics
         if format == "Radio" and publisher in ["NZME Radio", "MediaWorks Radio"]:
             tarps = round(min(100, 30 + (week % 20)), 1)
             reach = round(tarps / 1.5, 1)
@@ -239,11 +234,70 @@ def generate_data():
             "Station": station
         })
 
-    df = pd.DataFrame(rows)
-    return df
+    return pd.DataFrame(rows)
 
 df = generate_data()
 
+# -------------------------------
+# CHART GENERATION FUNCTIONS
+# -------------------------------
+def generate_roas_cpa_chart():
+    """Generate ROAS and CPA comparison chart by publisher"""
+    data = df.groupby('Publisher').agg({
+        'ROAS': 'mean',
+        'CPA ($)': 'mean'
+    }).reset_index().head(10)
+    
+    # Normalize CPA to same scale as ROAS for visualization
+    data['CPA_normalized'] = data['CPA ($)'] / 10
+    
+    roas_chart = alt.Chart(data).mark_bar(color='#00d4ff').encode(
+        x=alt.X('Publisher:N', sort='-y'),
+        y=alt.Y('ROAS:Q', title='ROAS'),
+    ).properties(width=700, height=300, title='Average ROAS by Publisher')
+    
+    return roas_chart
+
+def generate_format_performance_chart():
+    """Generate performance by format"""
+    data = df.groupby('Format').agg({
+        'ROAS': 'mean',
+        'CTR (%)': 'mean',
+        'Spend ($)': 'sum'
+    }).reset_index()
+    
+    chart = alt.Chart(data).mark_bar(color='#0099ff').encode(
+        x=alt.X('Format:N'),
+        y=alt.Y('ROAS:Q', title='Average ROAS'),
+    ).properties(width=600, height=300, title='Performance by Format')
+    
+    return chart
+
+def generate_funnel_chart():
+    """Generate performance by funnel layer"""
+    data = df.groupby('Funnel Layer').agg({
+        'ROAS': 'mean',
+        'Revenue ($)': 'sum',
+        'Spend ($)': 'sum'
+    }).reset_index()
+    
+    chart = alt.Chart(data).mark_bar(color='#10b981').encode(
+        x=alt.X('Funnel Layer:N'),
+        y=alt.Y('ROAS:Q', title='Average ROAS'),
+    ).properties(width=600, height=300, title='Performance by Funnel Layer')
+    
+    return chart
+
+def generate_spend_by_publisher():
+    """Generate spend distribution by publisher"""
+    data = df.groupby('Publisher')['Spend ($)'].sum().reset_index().sort_values('Spend ($)', ascending=False).head(10)
+    
+    chart = alt.Chart(data).mark_bar(color='#8b5cf6').encode(
+        x=alt.X('Publisher:N', sort='-y'),
+        y=alt.Y('Spend ($):Q', title='Total Spend'),
+    ).properties(width=700, height=300, title='Top 10 Publishers by Spend')
+    
+    return chart
 
 # -------------------------------
 # DISPLAY PREVIOUS MESSAGES
@@ -275,6 +329,20 @@ if user_input:
                 )
                 output = response.choices[0].message.content
                 st.markdown(output)
+                
+                # Display relevant charts based on user query
+                if any(keyword in user_input.lower() for keyword in ['roas', 'cpa', 'publisher', 'channel']):
+                    st.altair_chart(generate_roas_cpa_chart(), use_container_width=True)
+                elif any(keyword in user_input.lower() for keyword in ['format', 'video', 'static', 'carousel']):
+                    st.altair_chart(generate_format_performance_chart(), use_container_width=True)
+                elif any(keyword in user_input.lower() for keyword in ['funnel', 'awareness', 'consideration', 'conversion']):
+                    st.altair_chart(generate_funnel_chart(), use_container_width=True)
+                elif any(keyword in user_input.lower() for keyword in ['spend', 'budget', 'allocation']):
+                    st.altair_chart(generate_spend_by_publisher(), use_container_width=True)
+                else:
+                    # Default chart if no specific keyword matches
+                    st.altair_chart(generate_roas_cpa_chart(), use_container_width=True)
+                
                 st.session_state.chat_history.append({"role": "assistant", "content": output})
             except Exception as e:
                 st.error(f"Error from Groq API: {e}")
