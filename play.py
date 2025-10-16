@@ -236,6 +236,15 @@ df = generate_data()
 # -------------------------------
 # DYNAMIC CHART GENERATION
 # -------------------------------
+def clean_output(text):
+    """Replace chart placeholder brackets with proper formatting"""
+    # Replace <Chart: with Chart Description:
+    text = text.replace('<Chart:', 'Chart Description:')
+    # Remove remaining angle brackets
+    text = text.replace('<Chart', 'Chart Description')
+    text = text.replace('>', '')
+    return text.strip()
+
 def generate_dynamic_chart(user_query, df):
     """Generate a chart based on what the user is asking about"""
     query_lower = user_query.lower()
@@ -381,13 +390,14 @@ if user_input:
                     messages=st.session_state.chat_history
                 )
                 output = response.choices[0].message.content
-                st.markdown(output)
+                cleaned_output = clean_output(output)
+                st.markdown(cleaned_output)
                 
                 # Generate dynamic chart based on user query
                 chart = generate_dynamic_chart(user_input, df)
                 st.altair_chart(chart, use_container_width=True)
                 
-                st.session_state.chat_history.append({"role": "assistant", "content": output})
+                st.session_state.chat_history.append({"role": "assistant", "content": cleaned_output})
             except Exception as e:
                 error_str = str(e).lower()
                 if "rate_limit" in error_str or "rate limit" in error_str or "429" in error_str:
