@@ -101,6 +101,13 @@ Your role is to synthesize performance across all channels, formats, funnel laye
 - Recommend optimisations across: Channel mix, Creative format, Audience targeting, Budget allocation.
 - Prioritise changes that improve CPA, ROAS, or conversion volume.
 
+**IMPORTANT INSTRUCTIONS:**
+- Do NOT include any text like "<Chart: ...>" or chart descriptions in your response
+- Do NOT write placeholder chart descriptions or HTML chart tags
+- Do NOT describe what charts should look like
+- Simply provide your insight and analysis in plain text
+- Visualizations will be displayed automatically below your response
+
 Be concise, visual, and data-driven. Always speak to overarching performance, not isolated campaigns.
 """
 
@@ -382,7 +389,11 @@ if user_input:
                 
                 st.session_state.chat_history.append({"role": "assistant", "content": output})
             except Exception as e:
-                st.error(f"Error from Groq API: {e}")
+                error_str = str(e).lower()
+                if "rate_limit" in error_str or "rate limit" in error_str or "429" in error_str:
+                    st.warning("⚠️ Too many messages sent. Please wait a moment and try again.")
+                else:
+                    st.error(f"Error from Groq API: {e}")
 
 # -------------------------------
 # LEGAL DISCLAIMER
