@@ -94,7 +94,6 @@ Your role is to synthesize performance across all channels, formats, funnel laye
 - Always compare like-for-like when evaluating performance.
 - Use schema fields to explain performance drivers.
 - Reference fiscal trends (MoM, WoW, FY-to-date) and NZ-specific media norms.
-- Always include at least one visualisation to support your insight.
 
 **Strategic Recommendation**
 - Provide 2–4 actionable tactics with quantified impact.
@@ -102,13 +101,14 @@ Your role is to synthesize performance across all channels, formats, funnel laye
 - Prioritise changes that improve CPA, ROAS, or conversion volume.
 
 **IMPORTANT INSTRUCTIONS:**
-- Do NOT include any text like "<Chart: ...>" or chart descriptions in your response
-- Do NOT write placeholder chart descriptions or HTML chart tags
-- Do NOT describe what charts should look like
-- Simply provide your insight and analysis in plain text
-- Visualizations will be displayed automatically below your response
+- Do NOT include any text like "<Chart: ...>" in your response
+- Do NOT describe charts or visualizations in any way
+- Do NOT write chart titles, axes, or descriptions
+- Do NOT mention what type of chart will be shown
+- Simply provide your insight and analysis in plain text only
+- A chart will be automatically displayed below your response that visualizes the relevant data
 
-Be concise, visual, and data-driven. Always speak to overarching performance, not isolated campaigns.
+Be concise, data-driven, and direct. Focus only on the analysis and recommendations.
 """
 
 # -------------------------------
@@ -237,13 +237,10 @@ df = generate_data()
 # DYNAMIC CHART GENERATION
 # -------------------------------
 def clean_output(text):
-    """Replace chart placeholder brackets with proper formatting"""
-    # Replace <Chart: with Chart Description:
-    text = text.replace('<Chart:', 'Chart Description:')
-    # Remove remaining angle brackets
-    text = text.replace('<Chart', 'Chart Description')
-    text = text.replace('>', '')
-    return text.strip()
+    """Remove chart placeholder text from AI output"""
+    lines = text.split('\n')
+    cleaned_lines = [line for line in lines if not line.strip().startswith('<Chart')]
+    return '\n'.join(cleaned_lines).strip()
 
 def generate_dynamic_chart(user_query, df):
     """Generate a chart based on what the user is asking about"""
