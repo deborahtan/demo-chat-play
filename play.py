@@ -69,6 +69,9 @@ if not api_key:
 
 client = Groq(api_key=api_key)
 
+# -------------------------------
+# SYSTEM PROMPT
+# -------------------------------
 system_prompt = """
 You are the Dentsu Intelligence Assistant — a senior strategist delivering enterprise-level marketing intelligence to C-suite stakeholders across Media, Marketing, CRM, Loyalty, and Finance.
 
@@ -81,7 +84,6 @@ Your role is to synthesize performance across all channels, formats, funnel laye
 - Frame commentary in terms of business impact, efficiency, and momentum.
 
 **Insight**
-- Use charts and graphs to visualize topline metrics (e.g., spend, revenue, ROAS, CTR, CPA).
 - Segment by:
   - Funnel Layer: Awareness, Consideration, Conversion
   - Format: Video, Static, Carousel, Interactive, Radio
@@ -89,32 +91,18 @@ Your role is to synthesize performance across all channels, formats, funnel laye
   - Publisher: Meta, YouTube, NZ Herald, NZME Radio, etc.
   - Audience Segment (Demographic): e.g., Millennials, Boomers, Parents with Kids
   - Audience Segment (Behavioral): e.g., High Intent Shoppers, Cart Abandoners, Loyalty Members
-- Always compare like-for-like when evaluating performance — e.g., Video vs Video, Carousel vs Static, Awareness vs Awareness — to ensure recommendations are contextually valid.
-- Use schema fields to explain performance drivers — e.g., “CPA improved due to Loyalty Members in Conversion layer via Meta Carousel.”
-- Reference fiscal trends (MoM, WoW, FY-to-date) and NZ-specific media norms (e.g., radio TARPs, seasonal shifts).
+- Always compare like-for-like when evaluating performance.
+- Use schema fields to explain performance drivers.
+- Reference fiscal trends (MoM, WoW, FY-to-date) and NZ-specific media norms.
 - Always include at least one visualisation to support your insight.
 
 **Strategic Recommendation**
-- Provide 2–4 actionable tactics with quantified impact (e.g., “Shift 12% of spend from Static to Video to improve ROAS by +0.8”).
-- Recommend optimisations across:
-  - Channel mix based on their respective objectives
-  - Creative format, i.e. suggestion similar concepts or testing new ones
-  - Audience targeting (demographic, behavioral, or 1PD/2PD/3PD combinations)
-  - Budget allocation
-- Avoid simplistic budget cuts based on surface metrics. Instead, assess whether performance is driven by creative, audience, or channel.
+- Provide 2–4 actionable tactics with quantified impact.
+- Recommend optimisations across: Channel mix, Creative format, Audience targeting, Budget allocation.
 - Prioritise changes that improve CPA, ROAS, or conversion volume.
-- Reference platform learning, seasonal trends, and scalability potential.
 
-**Examples**
-- FY Month 4: Meta contributed 38% of total conversions with ROAS 4.1 and CPA $32. Remarketing drove +22% MoM uplift.
-- FY Week 17: Consideration layer delivered 57% of conversions and 52% of revenue. Carousel formats outperformed Static by +1.3 ROAS.
-- Strategic: Raise frequency on Loyalty Members from 8x to 12x to lift conversion volume by +18%.
-- Audience: Boomers in Awareness layer via Radio (NZME) delivered strong reach (320 TARPs) but low conversion. Recommend shifting 15% to Consideration layer with Static formats.
-- Format: Carousel in Conversion layer with High Intent Shoppers delivered ROAS 4.8 vs Static at 3.2. Recommend scaling Carousel with new creative variants.
-
-Be concise, visual, and data-driven. Always speak to overarching performance, not isolated campaigns. Use the full schema to reason and recommend.
+Be concise, visual, and data-driven. Always speak to overarching performance, not isolated campaigns.
 """
-
 
 # -------------------------------
 # CHAT MEMORY
@@ -239,65 +227,123 @@ def generate_data():
 df = generate_data()
 
 # -------------------------------
-# CHART GENERATION FUNCTIONS
+# DYNAMIC CHART GENERATION
 # -------------------------------
-def generate_roas_cpa_chart():
-    """Generate ROAS and CPA comparison chart by publisher"""
-    data = df.groupby('Publisher').agg({
-        'ROAS': 'mean',
-        'CPA ($)': 'mean'
-    }).reset_index().head(10)
+def generate_dynamic_chart(user_query, df):
+    """Generate a chart based on what the user is asking about"""
+    query_lower = user_query.lower()
     
-    # Normalize CPA to same scale as ROAS for visualization
-    data['CPA_normalized'] = data['CPA ($)'] / 10
+    # Check what the user is asking about
+    if any(word in query_lower for word in ['audience', 'demographic', 'behavioral', 'segment']):
+        data = df.groupby('Audience Segment (Demographic)').agg({
+            'ROAS': 'mean',
+            'CPA ($)': 'mean'
+        }).reset_index()
+        
+        roas_chart = alt.Chart(data).mark_line(point=True, color='#00d4ff', size=3).encode(
+            x='Audience Segment (Demographic):N',
+            y=alt.Y('ROAS:Q', title='ROAS'),
+            tooltip=['Audience Segment (Demographic)', alt.Tooltip('ROAS:Q', format='.2f')]
+        )
+        
+        cpa_chart = alt.Chart(data).mark_line(point=True, color='#ef4444', size=3).encode(
+            x='Audience Segment (Demographic):N',
+            y=alt.Y('CPA ($):Q', title='CPA ($)', axis=alt.Axis(orient='right'))
+        )
+        
+        return alt.layer(roas_chart, cpa_chart).resolve_scale(y='independent').properties(
+            width=800, height=400, title='Performance by Audience Segment'
+        ).interactive()
     
-    roas_chart = alt.Chart(data).mark_bar(color='#00d4ff').encode(
-        x=alt.X('Publisher:N', sort='-y'),
-        y=alt.Y('ROAS:Q', title='ROAS'),
-    ).properties(width=700, height=300, title='Average ROAS by Publisher')
+    elif any(word in query_lower for word in ['strategy', 'retargeting', 'brand lift', 'launch', 'promotion']):
+        data = df.groupby('Strategy').agg({
+            'ROAS': 'mean',
+            'Revenue ($)': 'sum'
+        }).reset_index()
+        
+        chart = alt.Chart(data).mark_bar(color='#8b5cf6').encode(
+            x='Strategy:N',
+            y=alt.Y('ROAS:Q', title='Average ROAS'),
+            tooltip=['Strategy', alt.Tooltip('ROAS:Q', format='.2f')]
+        ).properties(width=800, height=400, title='Performance by Strategy').interactive()
+        
+        return chart
     
-    return roas_chart
-
-def generate_format_performance_chart():
-    """Generate performance by format"""
-    data = df.groupby('Format').agg({
-        'ROAS': 'mean',
-        'CTR (%)': 'mean',
-        'Spend ($)': 'sum'
-    }).reset_index()
+    elif any(word in query_lower for word in ['creative', 'messaging', 'value-led', 'urgency', 'emotional']):
+        data = df.groupby('Creative Messaging').agg({
+            'ROAS': 'mean',
+            'CTR (%)': 'mean'
+        }).reset_index()
+        
+        chart = alt.Chart(data).mark_bar(color='#10b981').encode(
+            x='Creative Messaging:N',
+            y=alt.Y('ROAS:Q', title='Average ROAS'),
+            tooltip=['Creative Messaging', alt.Tooltip('ROAS:Q', format='.2f')]
+        ).properties(width=800, height=400, title='Performance by Creative Messaging').interactive()
+        
+        return chart
     
-    chart = alt.Chart(data).mark_bar(color='#0099ff').encode(
-        x=alt.X('Format:N'),
-        y=alt.Y('ROAS:Q', title='Average ROAS'),
-    ).properties(width=600, height=300, title='Performance by Format')
+    elif any(word in query_lower for word in ['spend', 'budget', 'allocation', 'cost']):
+        data = df.groupby('Publisher')['Spend ($)'].sum().reset_index().sort_values('Spend ($)', ascending=False).head(10)
+        
+        chart = alt.Chart(data).mark_bar(color='#f59e0b').encode(
+            x=alt.X('Publisher:N', sort='-y'),
+            y=alt.Y('Spend ($):Q', title='Total Spend'),
+            tooltip=['Publisher', alt.Tooltip('Spend ($):Q', format='$,.0f')]
+        ).properties(width=800, height=400, title='Top Publishers by Spend').interactive()
+        
+        return chart
     
-    return chart
-
-def generate_funnel_chart():
-    """Generate performance by funnel layer"""
-    data = df.groupby('Funnel Layer').agg({
-        'ROAS': 'mean',
-        'Revenue ($)': 'sum',
-        'Spend ($)': 'sum'
-    }).reset_index()
+    elif any(word in query_lower for word in ['format', 'video', 'static', 'carousel', 'interactive', 'radio']):
+        data = df.groupby('Format').agg({
+            'ROAS': 'mean',
+            'CTR (%)': 'mean'
+        }).reset_index()
+        
+        chart = alt.Chart(data).mark_bar(color='#06b6d4').encode(
+            x='Format:N',
+            y=alt.Y('ROAS:Q', title='Average ROAS'),
+            tooltip=['Format', alt.Tooltip('ROAS:Q', format='.2f'), alt.Tooltip('CTR (%):Q', format='.2f')]
+        ).properties(width=800, height=400, title='Performance by Format').interactive()
+        
+        return chart
     
-    chart = alt.Chart(data).mark_bar(color='#10b981').encode(
-        x=alt.X('Funnel Layer:N'),
-        y=alt.Y('ROAS:Q', title='Average ROAS'),
-    ).properties(width=600, height=300, title='Performance by Funnel Layer')
+    elif any(word in query_lower for word in ['funnel', 'awareness', 'consideration', 'conversion']):
+        data = df.groupby('Funnel Layer').agg({
+            'ROAS': 'mean',
+            'Revenue ($)': 'sum'
+        }).reset_index()
+        
+        chart = alt.Chart(data).mark_bar(color='#ec4899').encode(
+            x='Funnel Layer:N',
+            y=alt.Y('ROAS:Q', title='Average ROAS'),
+            tooltip=['Funnel Layer', alt.Tooltip('ROAS:Q', format='.2f')]
+        ).properties(width=800, height=400, title='Performance by Funnel Layer').interactive()
+        
+        return chart
     
-    return chart
-
-def generate_spend_by_publisher():
-    """Generate spend distribution by publisher"""
-    data = df.groupby('Publisher')['Spend ($)'].sum().reset_index().sort_values('Spend ($)', ascending=False).head(10)
-    
-    chart = alt.Chart(data).mark_bar(color='#8b5cf6').encode(
-        x=alt.X('Publisher:N', sort='-y'),
-        y=alt.Y('Spend ($):Q', title='Total Spend'),
-    ).properties(width=700, height=300, title='Top 10 Publishers by Spend')
-    
-    return chart
+    else:
+        # Default: Publisher ROAS/CPA with dual axis
+        data = df.groupby('Publisher').agg({
+            'ROAS': 'mean',
+            'CPA ($)': 'mean'
+        }).reset_index().sort_values('ROAS', ascending=False).head(10)
+        
+        roas_chart = alt.Chart(data).mark_line(point=True, color='#00d4ff', size=3).encode(
+            x=alt.X('Publisher:N', sort='-y'),
+            y=alt.Y('ROAS:Q', title='ROAS'),
+            tooltip=['Publisher', alt.Tooltip('ROAS:Q', format='.2f')]
+        )
+        
+        cpa_chart = alt.Chart(data).mark_line(point=True, color='#ef4444', size=3).encode(
+            x='Publisher:N',
+            y=alt.Y('CPA ($):Q', title='CPA ($)', axis=alt.Axis(orient='right')),
+            tooltip=['Publisher', alt.Tooltip('CPA ($):Q', format='$,.0f')]
+        )
+        
+        return alt.layer(roas_chart, cpa_chart).resolve_scale(y='independent').properties(
+            width=800, height=400, title='Publisher Performance (ROAS vs CPA)'
+        ).interactive()
 
 # -------------------------------
 # DISPLAY PREVIOUS MESSAGES
@@ -330,18 +376,9 @@ if user_input:
                 output = response.choices[0].message.content
                 st.markdown(output)
                 
-                # Display relevant charts based on user query
-                if any(keyword in user_input.lower() for keyword in ['roas', 'cpa', 'publisher', 'channel']):
-                    st.altair_chart(generate_roas_cpa_chart(), use_container_width=True)
-                elif any(keyword in user_input.lower() for keyword in ['format', 'video', 'static', 'carousel']):
-                    st.altair_chart(generate_format_performance_chart(), use_container_width=True)
-                elif any(keyword in user_input.lower() for keyword in ['funnel', 'awareness', 'consideration', 'conversion']):
-                    st.altair_chart(generate_funnel_chart(), use_container_width=True)
-                elif any(keyword in user_input.lower() for keyword in ['spend', 'budget', 'allocation']):
-                    st.altair_chart(generate_spend_by_publisher(), use_container_width=True)
-                else:
-                    # Default chart if no specific keyword matches
-                    st.altair_chart(generate_roas_cpa_chart(), use_container_width=True)
+                # Generate dynamic chart based on user query
+                chart = generate_dynamic_chart(user_input, df)
+                st.altair_chart(chart, use_container_width=True)
                 
                 st.session_state.chat_history.append({"role": "assistant", "content": output})
             except Exception as e:
