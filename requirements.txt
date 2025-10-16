@@ -1,0 +1,10 @@
+groq>=0.5.0
+streamlit
+pandas
+numpy
+altair
+streamlit-lightweight-charts
+openai>=1.0.0
+flask
+gunicorn
+requests
