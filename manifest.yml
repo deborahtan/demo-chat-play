@@ -1,0 +1,7 @@
+manifest_version: 1
+artifacts:
+  - app.py
+  - play.py
+  - requirements.txt
+  - .streamlit/config.toml
+default_streamlit: app.py
