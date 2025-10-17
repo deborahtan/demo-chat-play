@@ -9,7 +9,7 @@ from groq import Groq
 # CONFIG
 # -------------------------------
 st.set_page_config(
-    page_title="Dentsu Intelligence Assistant",
+    page_title="Dentsu Conversational Analytics",
     page_icon="https://img.icons8.com/ios11/16/000000/dashboard-gauge.png",
     layout="wide"
 )
@@ -43,12 +43,21 @@ h1,h2,h3,h4,h5,h6 {font-weight:600;color:#fff;}
 </style>
 """, unsafe_allow_html=True)
 
+# Hide Streamlit toolbar and footer
+hide_streamlit_style = """
+<style>
+[data-testid="stToolbar"] {visibility: hidden !important;}
+footer {visibility: hidden !important;}
+</style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
 # -------------------------------
 # SIDEBAR
 # -------------------------------
 with st.sidebar:
     st.image("https://www.dentsu.com/assets/images/main-logo-alt.png", width=160)
-    st.header("Executive Chat")
+    st.header("Conversational Analytics")
     st.markdown("""
     **How to use**
     - Type any question about campaign performance or strategy.
