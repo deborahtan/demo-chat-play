@@ -41,6 +41,12 @@ h1,h2,h3,h4,h5,h6 {font-weight:600;color:#fff;}
     border-radius:12px;
     padding:20px;
 }
+/* Center text in buttons */
+button[kind="secondary"] p {
+    text-align: center !important;
+    white-space: normal !important;
+    line-height: 1.4 !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -68,14 +74,6 @@ with st.sidebar:
     - The assistant responds with quantified, data-driven insight.
     - Conversation context is remembered.
     """)
-    
-    # Share link button
-    current_url = "https://dentsu-analytics.streamlit.app"  # Update with your actual deployed URL
-    if st.button("🔗 Share This App", use_container_width=True):
-        st.code(current_url, language=None)
-        st.success("Link copied! Share this with your team.")
-    
-    st.divider()
     
     # Clear conversation button
     if st.button("🧹 Clear Conversation", use_container_width=True):
@@ -540,6 +538,16 @@ def generate_dynamic_chart(user_query, df):
 # MAIN LAYOUT
 # -------------------------------
 
+# Share button in top right
+col_title, col_share = st.columns([6, 1])
+with col_title:
+    st.title("")
+with col_share:
+    current_url = "https://dentsu-analytics.streamlit.app"  # Update with your actual deployed URL
+    if st.button("🔗 Share", use_container_width=True):
+        st.code(current_url, language=None)
+        st.success("Link ready to share!")
+
 # DISPLAY PREVIOUS MESSAGES
 for msg in st.session_state.chat_history:
     if msg["role"] == "assistant":
@@ -555,19 +563,19 @@ if "rerun_question" in st.session_state:
     preset_input = st.session_state.rerun_question
     del st.session_state.rerun_question
 
-# Quick Questions (above chat input)
+# Quick Questions (above chat input) - centered text with emojis
 st.markdown("### 💡 Quick Questions")
-cols = st.columns(7)
 preset_questions = [
-    "Recommend optimal channel mixes for $100M, $200M, and $300M investment levels.",
-    "Determine which formats delivered the highest ROI and CPA.",
-    "Evaluate channels & publishers with the strongest click-to-conversion rates.",
-    "Highlight months with the highest churn and distinguish internal vs. external drivers.",
-    "Is Video or Static driving higher engagement?",
-    "Which audience segment is underperforming?",
-    "What's driving ROAS on Social vs Display?"
+    "💰 Recommend optimal channel mixes for $100M, $200M, and $300M investment levels.",
+    "📊 Determine which formats delivered the highest ROI and CPA.",
+    "🎯 Evaluate channels & publishers with the strongest click-to-conversion rates.",
+    "📉 Highlight months with the highest churn and distinguish internal vs. external drivers.",
+    "🎥 Is Video or Static driving higher engagement?",
+    "👥 Which audience segment is underperforming?",
+    "📱 What's driving ROAS on Social vs Display?"
 ]
 
+cols = st.columns(7)
 for idx, question in enumerate(preset_questions):
     with cols[idx]:
         if st.button(question, use_container_width=True, key=f"preset_{question}"):
