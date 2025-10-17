@@ -396,10 +396,108 @@ def generate_dynamic_chart(user_query, df):
     """Generate a chart based on what the user is asking about"""
     query_lower = user_query.lower()
     
-    if any(word in query_lower for word in ['audience', 'demographic', 'behavioral', 'segment']):
-        data = df.groupby('Audience Segment (Demographic)').agg({
+    # Channel mix / investment / budget allocation questions
+    if any(word in query_lower for word in ['channel mix', 'investment', '$100m', '$200m', '$300m', 'optimal', 'allocation']):
+        data = df.groupby('Publisher').agg({
+            'ROAS': 'mean',
+            'Spend ($)': 'sum',
+            'Revenue ($)': 'sum'
+        }).reset_index().sort_values('ROAS', ascending=False).head(10)
+        
+        chart = alt.Chart(data).mark_bar(color='#8b5cf6').encode(
+            x=alt.X('Publisher:N', sort='-y'),
+            y=alt.Y('ROAS:Q', title='Average ROAS'),
+            tooltip=['Publisher', alt.Tooltip('ROAS:Q', format='.2f'), alt.Tooltip('Spend ($):Q', format='$,.0f')]
+        ).properties(width=800, height=400, title='Publisher Performance by ROAS').interactive()
+        
+        return chart
+    
+    # ROI and CPA by format
+    elif any(word in query_lower for word in ['roi', 'highest roi', 'cpa', 'format']):
+        data = df.groupby('Format').agg({
+            'ROAS': 'mean',
+            'CPA ($)': 'mean',
+            'Revenue ($)': 'sum'
+        }).reset_index().sort_values('ROAS', ascending=False)
+        
+        base = alt.Chart(data).encode(x='Format:N')
+        
+        roas_chart = base.mark_bar(color='#10b981').encode(
+            y=alt.Y('ROAS:Q', title='Average ROAS'),
+            tooltip=['Format', alt.Tooltip('ROAS:Q', format='.2f'), alt.Tooltip('CPA ($):Q', format='$,.2f')]
+        )
+        
+        cpa_line = base.mark_line(point=True, color='#ef4444', size=3).encode(
+            y=alt.Y('CPA ($):Q', title='CPA ($)', axis=alt.Axis(orient='right')),
+            tooltip=['Format', alt.Tooltip('CPA ($):Q', format='$,.2f')]
+        )
+        
+        return alt.layer(roas_chart, cpa_line).resolve_scale(y='independent').properties(
+            width=800, height=400, title='Format Performance: ROAS vs CPA'
+        ).interactive()
+    
+    # Click-to-conversion rates by channel/publisher
+    elif any(word in query_lower for word in ['click', 'conversion rate', 'click-to-conversion', 'strongest']):
+        data = df.groupby('Publisher').agg({
+            'Conversion Rate (%)': 'mean',
+            'CTR (%)': 'mean',
+            'Conversions': 'sum'
+        }).reset_index().sort_values('Conversion Rate (%)', ascending=False).head(10)
+        
+        chart = alt.Chart(data).mark_bar(color='#3b82f6').encode(
+            x=alt.X('Publisher:N', sort='-y'),
+            y=alt.Y('Conversion Rate (%):Q', title='Conversion Rate (%)'),
+            tooltip=['Publisher', alt.Tooltip('Conversion Rate (%):Q', format='.2f'), alt.Tooltip('CTR (%):Q', format='.2f')]
+        ).properties(width=800, height=400, title='Publishers by Conversion Rate').interactive()
+        
+        return chart
+    
+    # Churn analysis by month
+    elif any(word in query_lower for word in ['churn', 'month', 'highest churn', 'internal', 'external', 'driver']):
+        # Group by month (convert week to month approximation)
+        df['Month'] = ((df['Week'] - 1) // 4) + 1
+        data = df.groupby('Month').agg({
+            'Conversions': 'sum',
+            'Spend ($)': 'sum',
             'ROAS': 'mean',
             'CPA ($)': 'mean'
+        }).reset_index()
+        
+        # Calculate churn proxy (inverse of conversions normalized)
+        data['Churn Index'] = 100 - (data['Conversions'] / data['Conversions'].max() * 100)
+        
+        chart = alt.Chart(data).mark_line(point=True, color='#ef4444', size=3).encode(
+            x=alt.X('Month:Q', title='Month'),
+            y=alt.Y('Churn Index:Q', title='Churn Index'),
+            tooltip=['Month', alt.Tooltip('Churn Index:Q', format='.1f'), alt.Tooltip('Conversions:Q', format=',.0f')]
+        ).properties(width=800, height=400, title='Churn Index by Month').interactive()
+        
+        return chart
+    
+    # Video vs Static engagement
+    elif any(word in query_lower for word in ['video', 'static', 'engagement', 'higher engagement']):
+        data = df[df['Format'].isin(['Video', 'Static'])].groupby('Format').agg({
+            'CTR (%)': 'mean',
+            'Time on Site (min)': 'mean',
+            'Pages Per Session': 'mean',
+            'Social Likes': 'sum',
+            'Social Shares': 'sum'
+        }).reset_index()
+        
+        chart = alt.Chart(data).mark_bar(color='#06b6d4').encode(
+            x='Format:N',
+            y=alt.Y('CTR (%):Q', title='Average CTR (%)'),
+            tooltip=['Format', alt.Tooltip('CTR (%):Q', format='.2f'), alt.Tooltip('Time on Site (min):Q', format='.1f')]
+        ).properties(width=800, height=400, title='Video vs Static: Engagement Metrics').interactive()
+        
+        return chart
+    
+    # Audience segment performance
+    elif any(word in query_lower for word in ['audience', 'segment', 'underperforming', 'demographic', 'behavioral']):
+        data = df.groupby('Audience Segment (Demographic)').agg({
+            'ROAS': 'mean',
+            'CPA ($)': 'mean',
+            'Conversion Rate (%)': 'mean'
         }).reset_index()
         
         roas_chart = alt.Chart(data).mark_line(point=True, color='#00d4ff', size=3).encode(
@@ -410,108 +508,39 @@ def generate_dynamic_chart(user_query, df):
         
         cpa_chart = alt.Chart(data).mark_line(point=True, color='#ef4444', size=3).encode(
             x='Audience Segment (Demographic):N',
-            y=alt.Y('CPA ($):Q', title='CPA ($)', axis=alt.Axis(orient='right'))
+            y=alt.Y('CPA ($):Q', title='CPA ($)', axis=alt.Axis(orient='right')),
+            tooltip=['Audience Segment (Demographic)', alt.Tooltip('CPA ($):Q', format='$,.2f')]
         )
         
         return alt.layer(roas_chart, cpa_chart).resolve_scale(y='independent').properties(
-            width=800, height=400
+            width=800, height=400, title='Audience Segment Performance'
         ).interactive()
     
-    elif any(word in query_lower for word in ['strategy', 'retargeting', 'brand lift', 'launch', 'promotion']):
-        data = df.groupby('Strategy').agg({
+    # Social vs Display ROAS drivers
+    elif any(word in query_lower for word in ['social', 'display', 'roas', 'driving']):
+        social_publishers = ['Meta', 'TikTok', 'LinkedIn']
+        display_publishers = ['Stuff', 'NZ Herald', 'TVNZ OnDemand', 'MetService']
+        
+        df['Channel Type'] = df['Publisher'].apply(
+            lambda x: 'Social' if x in social_publishers else ('Display' if x in display_publishers else 'Other')
+        )
+        
+        data = df[df['Channel Type'].isin(['Social', 'Display'])].groupby('Channel Type').agg({
             'ROAS': 'mean',
-            'Revenue ($)': 'sum'
-        }).reset_index()
-        
-        chart = alt.Chart(data).mark_bar(color='#8b5cf6').encode(
-            x='Strategy:N',
-            y=alt.Y('ROAS:Q', title='Average ROAS'),
-            tooltip=['Strategy', alt.Tooltip('ROAS:Q', format='.2f')]
-        ).properties(width=800, height=400).interactive()
-        
-        return chart
-    
-    elif any(word in query_lower for word in ['creative', 'messaging', 'value-led', 'urgency', 'emotional']):
-        data = df.groupby('Creative Messaging').agg({
-            'ROAS': 'mean',
-            'CTR (%)': 'mean'
-        }).reset_index()
-        
-        chart = alt.Chart(data).mark_bar(color='#10b981').encode(
-            x='Creative Messaging:N',
-            y=alt.Y('ROAS:Q', title='Average ROAS'),
-            tooltip=['Creative Messaging', alt.Tooltip('ROAS:Q', format='.2f')]
-        ).properties(width=800, height=400).interactive()
-        
-        return chart
-    
-    elif any(word in query_lower for word in ['spend', 'budget', 'allocation', 'cost', 'investment']):
-        data = df.groupby('Publisher')['Spend ($)'].sum().reset_index().sort_values('Spend ($)', ascending=False).head(10)
-        
-        chart = alt.Chart(data).mark_bar(color='#f59e0b').encode(
-            x=alt.X('Publisher:N', sort='-y'),
-            y=alt.Y('Spend ($):Q', title='Total Spend'),
-            tooltip=['Publisher', alt.Tooltip('Spend ($):Q', format='$,.0f')]
-        ).properties(width=800, height=400).interactive()
-        
-        return chart
-    
-    elif any(word in query_lower for word in ['format', 'video', 'static', 'carousel', 'interactive', 'radio']):
-        data = df.groupby('Format').agg({
-            'ROAS': 'mean',
-            'CTR (%)': 'mean'
-        }).reset_index()
-        
-        chart = alt.Chart(data).mark_bar(color='#06b6d4').encode(
-            x='Format:N',
-            y=alt.Y('ROAS:Q', title='Average ROAS'),
-            tooltip=['Format', alt.Tooltip('ROAS:Q', format='.2f'), alt.Tooltip('CTR (%):Q', format='.2f')]
-        ).properties(width=800, height=400).interactive()
-        
-        return chart
-    
-    elif any(word in query_lower for word in ['funnel', 'awareness', 'consideration', 'conversion']):
-        data = df.groupby('Funnel Layer').agg({
-            'ROAS': 'mean',
+            'CTR (%)': 'mean',
+            'Conversion Rate (%)': 'mean',
             'Revenue ($)': 'sum'
         }).reset_index()
         
         chart = alt.Chart(data).mark_bar(color='#ec4899').encode(
-            x='Funnel Layer:N',
+            x='Channel Type:N',
             y=alt.Y('ROAS:Q', title='Average ROAS'),
-            tooltip=['Funnel Layer', alt.Tooltip('ROAS:Q', format='.2f')]
-        ).properties(width=800, height=400).interactive()
+            tooltip=['Channel Type', alt.Tooltip('ROAS:Q', format='.2f'), alt.Tooltip('CTR (%):Q', format='.2f')]
+        ).properties(width=800, height=400, title='Social vs Display: ROAS Comparison').interactive()
         
         return chart
     
-    elif any(word in query_lower for word in ['roi', 'return']):
-        data = df.groupby('Format').agg({
-            'ROAS': 'mean',
-            'CPA ($)': 'mean'
-        }).reset_index().sort_values('ROAS', ascending=False)
-        
-        chart = alt.Chart(data).mark_bar(color='#10b981').encode(
-            x=alt.X('Format:N', sort='-y'),
-            y=alt.Y('ROAS:Q', title='Average ROAS'),
-            tooltip=['Format', alt.Tooltip('ROAS:Q', format='.2f'), alt.Tooltip('CPA ($):Q', format='$,.2f')]
-        ).properties(width=800, height=400).interactive()
-        
-        return chart
-    
-    elif any(word in query_lower for word in ['click', 'conversion', 'rate']):
-        data = df.groupby('Publisher').agg({
-            'CTR (%)': 'mean',
-            'Conversion Rate (%)': 'mean'
-        }).reset_index().sort_values('Conversion Rate (%)', ascending=False).head(10)
-        
-        chart = alt.Chart(data).mark_bar(color='#3b82f6').encode(
-            x=alt.X('Publisher:N', sort='-y'),
-            y=alt.Y('Conversion Rate (%):Q', title='Conversion Rate (%)'),
-            tooltip=['Publisher', alt.Tooltip('Conversion Rate (%):Q', format='.2f'), alt.Tooltip('CTR (%):Q', format='.2f')]
-        ).properties(width=800, height=400).interactive()
-        
-        return chart
-    
+    # Default fallback
     else:
         data = df.groupby('Publisher').agg({
             'ROAS': 'mean',
@@ -531,7 +560,7 @@ def generate_dynamic_chart(user_query, df):
         )
         
         return alt.layer(roas_chart, cpa_chart).resolve_scale(y='independent').properties(
-            width=800, height=400
+            width=800, height=400, title='Publisher Performance Overview'
         ).interactive()
 
 # -------------------------------
@@ -563,7 +592,7 @@ if "rerun_question" in st.session_state:
     preset_input = st.session_state.rerun_question
     del st.session_state.rerun_question
 
-# Quick Questions (above chat input) - centered text with emojis
+# Quick Questions (above chat input) - line by line in rectangular form
 st.markdown("### 💡 Quick Questions")
 preset_questions = [
     "💰 Recommend optimal channel mixes for $100M, $200M, and $300M investment levels.",
@@ -575,9 +604,10 @@ preset_questions = [
     "📱 What's driving ROAS on Social vs Display?"
 ]
 
-cols = st.columns(7)
-for idx, question in enumerate(preset_questions):
-    with cols[idx]:
+# Create centered container for questions
+col1, col2, col3 = st.columns([1, 3, 1])
+with col2:
+    for question in preset_questions:
         if st.button(question, use_container_width=True, key=f"preset_{question}"):
             preset_input = question
 
