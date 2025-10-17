@@ -15,6 +15,13 @@ st.set_page_config(
     layout="wide"
 )
 
+st.markdown("""
+    <style>
+        footer {visibility: hidden !important;}
+        .viewerBadge_container__1QSob {display: none !important;}
+    </style>
+""", unsafe_allow_html=True)
+
 # -------------------------------
 # STYLING
 # -------------------------------
