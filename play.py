@@ -69,8 +69,16 @@ with st.sidebar:
     - Conversation context is remembered.
     """)
     
+    # Share link button
+    current_url = "https://dentsu-analytics.streamlit.app"  # Update with your actual deployed URL
+    if st.button("🔗 Share This App", use_container_width=True):
+        st.code(current_url, language=None)
+        st.success("Link copied! Share this with your team.")
+    
+    st.divider()
+    
     # Clear conversation button
-    if st.button("🧹 Clear Conversation"):
+    if st.button("🧹 Clear Conversation", use_container_width=True):
         st.session_state.chat_history = []
         st.rerun()
     
@@ -120,7 +128,7 @@ client = Groq(api_key=api_key)
 # SYSTEM PROMPT
 # -------------------------------
 system_prompt = """
-You are the Dentsu Intelligence Assistant — a senior strategist delivering enterprise-level marketing intelligence to C-suite stakeholders across Media, Marketing, CRM, Loyalty, and Finance.
+You are the Dentsu Conversational Analytics tool — a senior strategist delivering enterprise-level marketing intelligence to C-suite stakeholders across Media, Marketing, CRM, Loyalty, and Finance.
 
 Your role is to synthesize performance across all channels, formats, funnel layers, and audience segments — not just individual campaigns — and deliver quantified, executive-ready insights that reflect fiscal year context and strategic impact.
 
@@ -439,7 +447,7 @@ def generate_dynamic_chart(user_query, df):
         
         return chart
     
-    elif any(word in query_lower for word in ['spend', 'budget', 'allocation', 'cost']):
+    elif any(word in query_lower for word in ['spend', 'budget', 'allocation', 'cost', 'investment']):
         data = df.groupby('Publisher')['Spend ($)'].sum().reset_index().sort_values('Spend ($)', ascending=False).head(10)
         
         chart = alt.Chart(data).mark_bar(color='#f59e0b').encode(
@@ -478,6 +486,34 @@ def generate_dynamic_chart(user_query, df):
         
         return chart
     
+    elif any(word in query_lower for word in ['roi', 'return']):
+        data = df.groupby('Format').agg({
+            'ROAS': 'mean',
+            'CPA ($)': 'mean'
+        }).reset_index().sort_values('ROAS', ascending=False)
+        
+        chart = alt.Chart(data).mark_bar(color='#10b981').encode(
+            x=alt.X('Format:N', sort='-y'),
+            y=alt.Y('ROAS:Q', title='Average ROAS'),
+            tooltip=['Format', alt.Tooltip('ROAS:Q', format='.2f'), alt.Tooltip('CPA ($):Q', format='$,.2f')]
+        ).properties(width=800, height=400).interactive()
+        
+        return chart
+    
+    elif any(word in query_lower for word in ['click', 'conversion', 'rate']):
+        data = df.groupby('Publisher').agg({
+            'CTR (%)': 'mean',
+            'Conversion Rate (%)': 'mean'
+        }).reset_index().sort_values('Conversion Rate (%)', ascending=False).head(10)
+        
+        chart = alt.Chart(data).mark_bar(color='#3b82f6').encode(
+            x=alt.X('Publisher:N', sort='-y'),
+            y=alt.Y('Conversion Rate (%):Q', title='Conversion Rate (%)'),
+            tooltip=['Publisher', alt.Tooltip('Conversion Rate (%):Q', format='.2f'), alt.Tooltip('CTR (%):Q', format='.2f')]
+        ).properties(width=800, height=400).interactive()
+        
+        return chart
+    
     else:
         data = df.groupby('Publisher').agg({
             'ROAS': 'mean',
@@ -503,81 +539,85 @@ def generate_dynamic_chart(user_query, df):
 # -------------------------------
 # MAIN LAYOUT
 # -------------------------------
-col_main, col_preset = st.columns([3, 1], gap="large")
 
-with col_main:
-    # DISPLAY PREVIOUS MESSAGES
-    for msg in st.session_state.chat_history:
-        if msg["role"] == "assistant":
-            with st.chat_message("assistant"):
-                st.markdown(msg["content"])
-        elif msg["role"] == "user":
-            with st.chat_message("user"):
-                st.markdown(msg["content"])
-
-    # CHAT INPUT
-    user_input = st.chat_input("Ask about performance, ROI, or recommendations...")
-    
-    # Check if rerunning from history
-    if "rerun_question" in st.session_state:
-        user_input = st.session_state.rerun_question
-        del st.session_state.rerun_question
-
-    if user_input:
-        # Add to question history
-        if "question_history" not in st.session_state:
-            st.session_state.question_history = []
-        
-        st.session_state.question_history.append({
-            "text": user_input,
-            "date": datetime.now().date(),
-            "timestamp": datetime.now().isoformat()
-        })
-        
-        st.session_state.chat_history.append({"role": "user", "content": user_input})
-        with st.chat_message("user"):
-            st.markdown(user_input)
-
+# DISPLAY PREVIOUS MESSAGES
+for msg in st.session_state.chat_history:
+    if msg["role"] == "assistant":
         with st.chat_message("assistant"):
-            with st.spinner("Analyzing performance..."):
-                try:
-                    response = client.chat.completions.create(
-                        model="llama-3.1-8b-instant",
-                        messages=st.session_state.chat_history
-                    )
-                    output = response.choices[0].message.content
-                    cleaned_output = clean_output(output)
-                    st.markdown(cleaned_output)
-                    
-                    chart = generate_dynamic_chart(user_input, df)
-                    st.altair_chart(chart, use_container_width=True)
-                    
-                    st.session_state.chat_history.append({"role": "assistant", "content": cleaned_output})
-                except Exception as e:
-                    error_str = str(e).lower()
-                    if "rate_limit" in error_str or "rate limit" in error_str or "429" in error_str:
-                        st.warning("⚠️ Too many messages sent. Please wait a moment and try again.")
-                    else:
-                        st.error(f"Error from Groq API: {e}")
+            st.markdown(msg["content"])
+    elif msg["role"] == "user":
+        with st.chat_message("user"):
+            st.markdown(msg["content"])
 
-with col_preset:
-    st.subheader("💡 Quick Questions")
-    
-    preset_questions = [
-        "How is 18-35 performing vs older segments?",
-        "Which channel has the best CPA this period?",
-        "Is Video or Static driving higher engagement?",
-        "What's the Consideration layer momentum?",
-        "How are Digital channels performing week-over-week?",
-        "Which audience segment is underperforming?",
-        "What's driving ROAS on Social vs Display?",
-        "Should we increase or decrease TV spend?"
-    ]
-    
-    for question in preset_questions:
+# Check if rerunning from history
+preset_input = None
+if "rerun_question" in st.session_state:
+    preset_input = st.session_state.rerun_question
+    del st.session_state.rerun_question
+
+# Quick Questions (above chat input)
+st.markdown("### 💡 Quick Questions")
+cols = st.columns(7)
+preset_questions = [
+    "Recommend optimal channel mixes for $100M, $200M, and $300M investment levels.",
+    "Determine which formats delivered the highest ROI and CPA.",
+    "Evaluate channels & publishers with the strongest click-to-conversion rates.",
+    "Highlight months with the highest churn and distinguish internal vs. external drivers.",
+    "Is Video or Static driving higher engagement?",
+    "Which audience segment is underperforming?",
+    "What's driving ROAS on Social vs Display?"
+]
+
+for idx, question in enumerate(preset_questions):
+    with cols[idx]:
         if st.button(question, use_container_width=True, key=f"preset_{question}"):
-            st.session_state.rerun_question = question
-            st.rerun()
+            preset_input = question
+
+st.markdown("---")
+
+# CHAT INPUT
+user_input = st.chat_input("Select a prompt above or type your custom prompt here")
+
+# Use preset input if a button was clicked
+if preset_input:
+    user_input = preset_input
+
+if user_input:
+    # Add to question history
+    if "question_history" not in st.session_state:
+        st.session_state.question_history = []
+    
+    st.session_state.question_history.append({
+        "text": user_input,
+        "date": datetime.now().date(),
+        "timestamp": datetime.now().isoformat()
+    })
+    
+    st.session_state.chat_history.append({"role": "user", "content": user_input})
+    with st.chat_message("user"):
+        st.markdown(user_input)
+
+    with st.chat_message("assistant"):
+        with st.spinner("Analyzing performance..."):
+            try:
+                response = client.chat.completions.create(
+                    model="llama-3.1-8b-instant",
+                    messages=st.session_state.chat_history
+                )
+                output = response.choices[0].message.content
+                cleaned_output = clean_output(output)
+                st.markdown(cleaned_output)
+                
+                chart = generate_dynamic_chart(user_input, df)
+                st.altair_chart(chart, use_container_width=True)
+                
+                st.session_state.chat_history.append({"role": "assistant", "content": cleaned_output})
+            except Exception as e:
+                error_str = str(e).lower()
+                if "rate_limit" in error_str or "rate limit" in error_str or "429" in error_str:
+                    st.warning("⚠️ Too many messages sent. Please wait a moment and try again.")
+                else:
+                    st.error(f"Error from Groq API: {e}")
 
 # -------------------------------
 # LEGAL DISCLAIMER
