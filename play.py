@@ -592,24 +592,49 @@ if "rerun_question" in st.session_state:
     preset_input = st.session_state.rerun_question
     del st.session_state.rerun_question
 
-# Quick Questions (above chat input) - line by line in rectangular form
-st.markdown("### 💡 Quick Questions")
-preset_questions = [
-    "💰 Recommend optimal channel mixes for $100M, $200M, and $300M investment levels.",
-    "📊 Determine which formats delivered the highest ROI and CPA.",
-    "🎯 Evaluate channels & publishers with the strongest click-to-conversion rates.",
-    "📉 Highlight months with the highest churn and distinguish internal vs. external drivers.",
-    "🎥 Is Video or Static driving higher engagement?",
-    "👥 Which audience segment is underperforming?",
-    "📱 What's driving ROAS on Social vs Display?"
-]
+# Initialize chat started flag
+if "chat_started" not in st.session_state:
+    st.session_state.chat_started = False
 
-# Create centered container for questions
-col1, col2, col3 = st.columns([1, 3, 1])
-with col2:
-    for question in preset_questions:
-        if st.button(question, use_container_width=True, key=f"preset_{question}"):
-            preset_input = question
+# Quick Questions (above chat input) - line by line in rectangular form
+# Only show if chat hasn't started
+if not st.session_state.chat_started:
+    st.markdown("### 💡 Quick Questions")
+    preset_questions = [
+        "💰 Recommend optimal channel mixes for $100M, $200M, and $300M investment levels.",
+        "📊 Determine which formats delivered the highest ROI and CPA.",
+        "🎯 Evaluate channels & publishers with the strongest click-to-conversion rates.",
+        "📉 Highlight months with the highest churn and distinguish internal vs. external drivers.",
+        "🎥 Is Video or Static driving higher engagement?",
+        "👥 Which audience segment is underperforming?",
+        "📱 What's driving ROAS on Social vs Display?"
+    ]
+
+    # Create centered container for questions
+    col1, col2, col3 = st.columns([1, 3, 1])
+    with col2:
+        for question in preset_questions:
+            if st.button(question, use_container_width=True, key=f"preset_{question}"):
+                preset_input = question
+                st.session_state.chat_started = True
+else:
+    # Show questions in bottom left when chat has started
+    with st.sidebar:
+        st.divider()
+        st.subheader("💡 Quick Questions")
+        preset_questions = [
+            "💰 Recommend optimal channel mixes for $100M, $200M, and $300M investment levels.",
+            "📊 Determine which formats delivered the highest ROI and CPA.",
+            "🎯 Evaluate channels & publishers with the strongest click-to-conversion rates.",
+            "📉 Highlight months with the highest churn and distinguish internal vs. external drivers.",
+            "🎥 Is Video or Static driving higher engagement?",
+            "👥 Which audience segment is underperforming?",
+            "📱 What's driving ROAS on Social vs Display?"
+        ]
+        
+        for question in preset_questions:
+            if st.button(question, use_container_width=True, key=f"sidebar_preset_{question}"):
+                preset_input = question
 
 st.markdown("---")
 
