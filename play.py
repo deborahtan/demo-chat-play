@@ -271,7 +271,44 @@ def generate_data():
         }
         impressions = int(spend / cpm_adjust[format] * 1000)
         clicks = int(impressions * (ctr / 100))
+        conversions = int(clicks * (0.03 + np.random.rand() * 0.05))  # 3-8% conversion rate
         revenue = spend * roas
+        
+        # Viewability metrics
+        viewability_rate = round(np.random.uniform(0.55, 0.85), 3)  # 55-85% viewability
+        measurable_impressions = int(impressions * 0.95)  # 95% measurable
+        
+        # Traffic & Engagement Metrics
+        website_sessions = int(clicks * np.random.uniform(0.7, 0.95))
+        time_on_site = round(np.random.uniform(1.5, 8.5), 1)  # minutes
+        pages_per_session = round(np.random.uniform(1.2, 5.5), 2)
+        bounce_rate = round(np.random.uniform(0.25, 0.75), 3)  # 25-75%
+        
+        # Social Engagement (if social channel)
+        if publisher in ["Meta", "TikTok", "LinkedIn"]:
+            social_likes = int(impressions * np.random.uniform(0.001, 0.008))
+            social_shares = int(impressions * np.random.uniform(0.0002, 0.002))
+            social_comments = int(impressions * np.random.uniform(0.0001, 0.001))
+        else:
+            social_likes = 0
+            social_shares = 0
+            social_comments = 0
+        
+        # Digital Revenue breakdown
+        website_sales = int(revenue * 0.45)
+        ecommerce_sales = int(revenue * 0.35)
+        affiliate_revenue = int(revenue * 0.15)
+        other_revenue = int(revenue * 0.05)
+        
+        # CX Metrics
+        form_submissions = int(conversions * 0.6)
+        lead_generation = int(conversions * 0.3)
+        signups = int(conversions * 0.1)
+        
+        # CPA derivatives
+        cost_per_lead = round(spend / max(1, lead_generation), 2) if lead_generation > 0 else spend
+        cost_per_signup = round(spend / max(1, signups), 2) if signups > 0 else spend
+        conversion_rate_pct = round((conversions / max(1, clicks)) * 100, 2)
 
         if format == "Radio" and publisher in ["NZME Radio", "MediaWorks Radio"]:
             tarps = round(min(100, 30 + (week % 20)), 1)
@@ -302,7 +339,27 @@ def generate_data():
             "CPA ($)": cpa,
             "Impressions": impressions,
             "Clicks": clicks,
+            "Conversions": conversions,
+            "Conversion Rate (%)": conversion_rate_pct,
             "Revenue ($)": revenue,
+            "Website Sales ($)": website_sales,
+            "E-Commerce Sales ($)": ecommerce_sales,
+            "Affiliate Revenue ($)": affiliate_revenue,
+            "Other Revenue ($)": other_revenue,
+            "Form Submissions": form_submissions,
+            "Leads Generated": lead_generation,
+            "Sign-Ups": signups,
+            "Cost Per Lead ($)": cost_per_lead,
+            "Cost Per Sign-Up ($)": cost_per_signup,
+            "Viewability (%)": viewability_rate,
+            "Measurable Impressions": measurable_impressions,
+            "Website Sessions": website_sessions,
+            "Time on Site (min)": time_on_site,
+            "Pages Per Session": pages_per_session,
+            "Bounce Rate (%)": bounce_rate,
+            "Social Likes": social_likes,
+            "Social Shares": social_shares,
+            "Social Comments": social_comments,
             "TARPs": tarps,
             "Reach (%)": reach,
             "Frequency": frequency,
