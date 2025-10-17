@@ -20,47 +20,88 @@ st.set_page_config(
 # -------------------------------
 st.markdown("""
 <style>
-html, body, [class*="css"] {
-    font-family: 'Inter', sans-serif;
-    background-color: #000;
-    color: #fff;
-}
-h1,h2,h3,h4,h5,h6 {font-weight:600;color:#fff;}
-[data-testid="stSidebar"] {
-    background-color:#000;
-    color:#fff;
-}
-[data-testid="stSidebar"] button {
-    background-color:#fff !important;
-    color:#000 !important;
-    border-radius:6px;
-    font-weight:600;
-}
-.answer-card {
-    background-color:#2e2e2e;
-    border-radius:12px;
-    padding:20px;
-}
-/* Center text in buttons */
-button[kind="secondary"] p {
-    text-align: center !important;
-    white-space: normal !important;
-    line-height: 1.4 !important;
-}
+    .stSidebar {
+        min-width: 336px;
+    }
+    .stSidebar .stHeading {
+        color: #FAFAFA;
+    }
+    .stSidebar .stElementContainer {
+        width: auto;
+    }
+    .history-section {
+        margin-top: 24px;
+        margin-bottom: 12px;
+    }
+    .history-section h4 {
+        font-size: 12px;
+        color: #A0A0A0;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 8px;
+        margin-top: 0;
+    }
+    .history-item {
+        padding: 8px 12px;
+        margin-bottom: 6px;
+        background-color: rgba(255, 255, 255, 0.05);
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 13px;
+        color: #E0E0E0;
+        transition: background-color 0.2s;
+        border-left: 3px solid transparent;
+    }
+    .history-item:hover {
+        background-color: rgba(255, 255, 255, 0.1);
+        border-left-color: #80D5FF;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# Hide Streamlit toolbar and footer
-hide_streamlit_style = """
-<style>
-#MainMenu {visibility: hidden;}
-footer {visibility: hidden;}
-[data-testid="stDecoration"] {visibility: hidden;}
-[data-testid="stStatusWidget"] {visibility: hidden;}
-.viewerBadge_container {visibility: hidden;}
-</style>
-"""
-st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+# Initialize session state
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+if "question_history" not in st.session_state:
+    st.session_state.question_history = {}
+
+# Helper function to get date key (YYYY-MM-DD)
+def get_date_key():
+    return datetime.now().strftime("%Y-%m-%d")
+
+# Helper function to format time
+def format_time(dt):
+    return dt.strftime("%H:%M")
+
+# Helper function to add question to history
+def add_to_history(question):
+    date_key = get_date_key()
+    if date_key not in st.session_state.question_history:
+        st.session_state.question_history[date_key] = []
+    st.session_state.question_history[date_key].append({
+        "question": question,
+        "timestamp": datetime.now()
+    })
+
+# Helper function to get yesterday's date key
+def get_yesterday_key():
+    yesterday = datetime.now() - timedelta(days=1)
+    return yesterday.strftime("%Y-%m-%d")
+
+# Helper function to categorize questions by date
+def get_history_sections():
+    today_key = get_date_key()
+    yesterday_key = get_yesterday_key()
+    
+    sections = []
+    
+    if today_key in st.session_state.question_history and st.session_state.question_history[today_key]:
+        sections.append(("Today", today_key))
+    
+    if yesterday_key in st.session_state.question_history and st.session_state.question_history[yesterday_key]:
+        sections.append(("Yesterday", yesterday_key))
+    
+    return sections
 
 # -------------------------------
 # SIDEBAR
@@ -113,6 +154,19 @@ with st.sidebar:
                 st.session_state.rerun_question = q["text"]
                 st.rerun()
 
+
+# -------------------------------
+# HEADER
+# -------------------------------
+st.markdown("""
+<div>
+    <h1 style="text-align: center; font-size: 64px;>
+        <span style="color: #FAFAFA; text-shadow: 0 0 4px rgba(216, 237, 255, 0.16), 0 2px 20px rgba(164, 214, 255, 0.36);">dentsu</span>
+        <span style="background: radial-gradient(909.23% 218.25% at -4.5% 144.64%, #80D5FF 0%, #79AAFA 44.5%, #C4ADFF 100%); background-clip: text; -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Conversational Analytics</span>
+    </h1>
+</div>
+""", unsafe_allow_html=True)
+
 # -------------------------------
 # GROQ SETUP
 # -------------------------------
@@ -122,6 +176,7 @@ if not api_key:
     st.stop()
 
 client = Groq(api_key=api_key)
+
 
 # -------------------------------
 # SYSTEM PROMPT
@@ -225,6 +280,58 @@ Be concise, visual, and data-driven. Always speak to overarching performance, no
 # -------------------------------
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = [{"role": "system", "content": system_prompt}]
+    
+    # Inject data summary into system context (one-time)
+    data_summary = f"""
+[Dataset Context]
+You have access to enterprise-level marketing performance data for FY 2025 with {len(df)} records across 52 weeks.
+**Annual Budget Range: $100M - $300M** with weekly spend ranging from $3M to $7.5M depending on funnel layer and seasonality.
+
+**Schema & Available Fields:**
+- Temporal: FY Year, Week
+- Channel & Format: Publisher, Strategy, Funnel Layer, Format, Creative Messaging
+- Audience: Audience Segment (Demographic), Audience Segment (Behavioral)
+- Financial: Spend ($), ROAS, CPA ($), Revenue ($), Website Sales ($), E-Commerce Sales ($), Affiliate Revenue ($)
+- Performance: Impressions, Clicks, CTR (%), Conversions, Conversion Rate (%), Form Submissions, Leads Generated, Sign-Ups, Cost Per Lead ($), Cost Per Sign-Up ($)
+- Engagement: Website Sessions, Time on Site (min), Pages Per Session, Bounce Rate (%)
+- Brand & Quality: Viewability (%), Measurable Impressions, Social Likes, Social Shares, Social Comments
+- Radio Metrics: TARPs, Reach (%), Frequency, Spot Count, Station
+
+**Available Publishers:** {', '.join(df['Publisher'].unique())}
+
+**Funnel Layers:** Awareness, Consideration, Conversion
+
+**Formats:** Video, Static, Carousel, Interactive, Radio
+
+**Strategies:** Retargeting, Brand Lift, Product Launch, Offer Promotion
+
+**Behavioral Segments:** High Intent Shoppers, Cart Abandoners, Loyalty Members
+
+**Demographic Segments:** Millennials, Boomers, Parents with Kids
+
+**Creative Messaging Types:** Value-led, Urgency-led, Emotional, Informational
+
+**Key Data Characteristics (Enterprise Scale):**
+- Weekly spend ranges: Awareness ($3M base), Consideration ($4.5M base), Conversion ($6M base)
+- Seasonal multiplier: 1.25x for weeks 40+ (Q4), bringing peak weekly spend to $3.75M-$7.5M
+- Total annual budget across all activities: ~$250M-$300M
+- Average ROAS by funnel: Awareness (2.0), Consideration (3.5), Conversion (5.0)
+- Average CPA by behavioral segment: High Intent Shoppers ($35), Cart Abandoners ($28), Loyalty Members ($22)
+- CTR by format: Video (2.8%), Carousel (3.2%), Static (1.2%), Interactive (2.5%), Radio (0.6%)
+- Typical weekly impressions: 500M-1.5B depending on format and funnel
+- Typical weekly conversions: 50K-200K depending on funnel layer and targeting
+
+**Instructions:**
+- Synthesize this data to answer user questions with multi-dimensional analysis appropriate for enterprise-scale decision making
+- Always reference actual trends, segments, and performance patterns from the dataset
+- When making recommendations, cite specific data points across efficiency, volume, engagement, audience fit, brand impact, and strategic context
+- Frame recommendations in terms of multi-million dollar budget shifts and their business impact
+- Generate insights that consider the full schema, not just ROAS or CPA alone
+- Consider scale implications: a 5% budget shift represents $5M-$15M annually
+- Visualizations are handled separately - focus your response on strategic analysis and recommendations
+"""
+    
+    st.session_state.chat_history.append({"role": "system", "content": data_summary})
 
 # -------------------------------
 # SAMPLE DATA
@@ -258,10 +365,11 @@ def generate_data():
         demo = demo_segments[i % 3]
         behav = behav_segments[i % 3]
 
+        # Enterprise-level spend ranges: $100M-$300M annually
         base_spend = {
-            "Awareness": 100_000,
-            "Consideration": 250_000,
-            "Conversion": 500_000
+            "Awareness": 3_000_000,      # $3M per week for Awareness
+            "Consideration": 4_500_000,  # $4.5M per week for Consideration
+            "Conversion": 6_000_000      # $6M per week for Conversion
         }[funnel]
 
         seasonal_multiplier = 1.25 if week >= 40 else 1.0
@@ -288,7 +396,7 @@ def generate_data():
             "Consideration": 3.5,
             "Conversion": 5.0
         }[funnel]
-        roas = max(1.2, roas_base - (spend / 1_000_000))
+        roas = max(1.2, roas_base - (spend / 10_000_000))
 
         cpm_adjust = {
             "Video": 6,
