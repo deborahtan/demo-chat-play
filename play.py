@@ -188,6 +188,8 @@ Your role is to synthesize performance across all channels, formats, funnel laye
 - Format: Carousel in Conversion layer with High Intent Shoppers delivered ROAS 4.8 vs Static at 3.2. Recommend scaling Carousel with new creative variants because the format reduces purchase hesitation by presenting multiple benefits/proof points.
 
 Be concise, visual, and data-driven. Always speak to overarching performance, not isolated campaigns. Use the full schema to reason and recommend. Always explain the *why* behind performance drivers from the audience perspective.
+
+**CRITICAL: Never include any chart descriptions, "[Insert Chart]" placeholders, or visualization references. Text analysis only.**
 """
 
 # -------------------------------
@@ -505,14 +507,14 @@ with col_preset:
     st.subheader("💡 Quick Questions")
     
     preset_questions = [
-        "How is Carousel format performing vs Static?",
-        "What's driving Loyalty Members conversion?",
-        "Which publisher has best ROAS this week?",
-        "How can we improve Awareness layer spend?",
-        "Why is CPA higher for Cart Abandoners?",
+        "How is 18-35 performing vs older segments?",
+        "Which channel has the best CPA this period?",
+        "Is Video or Static driving higher engagement?",
         "What's the Consideration layer momentum?",
+        "How are Digital channels performing week-over-week?",
         "Which audience segment is underperforming?",
-        "Should we scale Video or cut Static?"
+        "What's driving ROAS on Social vs Display?",
+        "Should we increase or decrease TV spend?"
     ]
     
     for question in preset_questions:
