@@ -316,9 +316,15 @@ df = generate_data()
 # DYNAMIC CHART GENERATION
 # -------------------------------
 def clean_output(text):
-    """Remove chart placeholder text from AI output"""
+    """Remove all chart placeholder text from AI output"""
+    import re
+    # Remove [Insert Chart X: ...] patterns
+    text = re.sub(r'\[Insert Chart \d+:.*?\]', '', text, flags=re.DOTALL)
+    # Remove <Chart: ...> patterns
+    text = re.sub(r'<Chart:.*?>', '', text, flags=re.DOTALL)
+    # Remove any lingering chart references
     lines = text.split('\n')
-    cleaned_lines = [line for line in lines if not line.strip().startswith('<Chart')]
+    cleaned_lines = [line for line in lines if not line.strip().startswith('<Chart') and not line.strip().startswith('[Insert Chart')]
     return '\n'.join(cleaned_lines).strip()
 
 def generate_dynamic_chart(user_query, df):
