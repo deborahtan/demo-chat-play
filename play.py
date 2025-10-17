@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import altair as alt
 from groq import Groq
+from datetime import datetime, timedelta
 
 # -------------------------------
 # CONFIG
@@ -46,8 +47,11 @@ h1,h2,h3,h4,h5,h6 {font-weight:600;color:#fff;}
 # Hide Streamlit toolbar and footer
 hide_streamlit_style = """
 <style>
-[data-testid="stToolbar"] {visibility: hidden !important;}
-footer {visibility: hidden !important;}
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+[data-testid="stDecoration"] {visibility: hidden;}
+[data-testid="stStatusWidget"] {visibility: hidden;}
+.viewerBadge_container {visibility: hidden;}
 </style>
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
@@ -64,9 +68,43 @@ with st.sidebar:
     - The assistant responds with quantified, data-driven insight.
     - Conversation context is remembered.
     """)
+    
+    # Clear conversation button
     if st.button("🧹 Clear Conversation"):
         st.session_state.chat_history = []
-        st.experimental_rerun()
+        st.rerun()
+    
+    st.divider()
+    
+    # Question history section
+    st.subheader("📋 Recent Questions")
+    
+    if "question_history" not in st.session_state:
+        st.session_state.question_history = []
+    
+    today = datetime.now().date()
+    yesterday = today - timedelta(days=1)
+    
+    today_questions = [q for q in st.session_state.question_history if q["date"] == today]
+    yesterday_questions = [q for q in st.session_state.question_history if q["date"] == yesterday]
+    
+    if today_questions:
+        st.markdown("**Today**")
+        for q in reversed(today_questions[-5:]):  # Show last 5
+            if st.button(q["text"][:50] + "..." if len(q["text"]) > 50 else q["text"], 
+                        key=f"today_{q['timestamp']}",
+                        use_container_width=True):
+                st.session_state.rerun_question = q["text"]
+                st.rerun()
+    
+    if yesterday_questions:
+        st.markdown("**Yesterday**")
+        for q in reversed(yesterday_questions[-5:]):  # Show last 5
+            if st.button(q["text"][:50] + "..." if len(q["text"]) > 50 else q["text"], 
+                        key=f"yesterday_{q['timestamp']}",
+                        use_container_width=True):
+                st.session_state.rerun_question = q["text"]
+                st.rerun()
 
 # -------------------------------
 # GROQ SETUP
@@ -86,6 +124,30 @@ You are the Dentsu Intelligence Assistant — a senior strategist delivering ent
 
 Your role is to synthesize performance across all channels, formats, funnel layers, and audience segments — not just individual campaigns — and deliver quantified, executive-ready insights that reflect fiscal year context and strategic impact.
 
+**Campaign Objectives & Context**
+- Awareness: Build brand recognition and reach new audiences. Success = high reach, frequency, and aided/unaided brand recall.
+- Consideration: Drive engagement and preference among aware audiences. Success = engagement rate, time spent, content shares, and lift in brand consideration metrics.
+- Conversion: Drive direct sales, sign-ups, or desired actions. Success = CTR, conversion rate, CPA, and ROAS.
+- Retargeting: Re-engage audiences who have shown interest. Success = high ROAS, low CPA, and conversion lift.
+- Brand Lift: Shift perception and emotional connection. Success = brand health metrics (consideration, preference, intent).
+- Product Launch: Drive trial and initial adoption. Success = awareness lift + trial rate + first-purchase conversion.
+- Offer Promotion: Drive immediate action via incentive. Success = redemption rate, uplift in sales volume, and velocity.
+
+**Audience Insight & User Behaviour**
+- Millennials: Value authenticity, sustainability, and community. Responsive to social proof and peer recommendations. Prefer mobile-first, video-rich experiences.
+- Boomers: Trust established brands and authority. Prefer clear, straightforward messaging. Lower digital engagement but higher lifetime value.
+- Parents with Kids: Driven by value, convenience, and family benefit. Responsive to safety/quality messaging and time-saving solutions. Cross-device consumption (TV + mobile).
+- High Intent Shoppers: Ready to purchase, price-conscious, comparing options. Respond to competitive positioning, reviews, and limited-time offers.
+- Cart Abandoners: Interested but hesitant (price, shipping, trust). Respond to incentives, social proof, and scarcity messaging.
+- Loyalty Members: Established customers, lower acquisition cost, high lifetime value. Respond to exclusivity, personalization, and VIP treatment.
+
+**Think from the Audience POV**
+- What problem are we solving for them?
+- What stage of their decision journey are they at?
+- What barriers prevent conversion (price, trust, complexity)?
+- What emotional triggers resonate (aspiration, fear of missing out, belonging)?
+- What content format and channel fit their media consumption habits?
+
 **Executive Overview**
 - Summarize performance across the latest fiscal month or week (e.g., FY Month 4, Week 17).
 - Quantify key shifts in ROAS, CPA, CTR, spend, and revenue.
@@ -102,12 +164,12 @@ Your role is to synthesize performance across all channels, formats, funnel laye
   - Audience Segment (Demographic): e.g., Millennials, Boomers, Parents with Kids
   - Audience Segment (Behavioral): e.g., High Intent Shoppers, Cart Abandoners, Loyalty Members
 - Always compare like-for-like when evaluating performance — e.g., Video vs Video, Carousel vs Static, Awareness vs Awareness — to ensure recommendations are contextually valid.
-- Use schema fields to explain performance drivers — e.g., "CPA improved due to Loyalty Members in Conversion layer via Meta Carousel."
+- Use schema fields to explain performance drivers — e.g., "CPA improved due to Loyalty Members in Conversion layer via Meta Carousel because the format reduces friction and builds confidence."
 - Reference fiscal trends (MoM, WoW, FY-to-date) and NZ-specific media norms (e.g., radio TARPs, seasonal shifts).
 - Always include at least one visualisation to support your insight.
 
 **Strategic Recommendation**
-- Provide 2–4 actionable tactics with quantified impact (e.g., "Shift 12% of spend from Static to Video to improve ROAS by +0.8").
+- Provide 2–4 actionable tactics with quantified impact (e.g., "Shift 12% of spend from Static to Video to improve ROAS by +0.8 because video formats drive higher emotional engagement for Millennials in Awareness layer").
 - Recommend optimisations across:
   - Channel mix based on their respective objectives
   - Creative format, i.e. suggestion similar concepts or testing new ones
@@ -116,15 +178,16 @@ Your role is to synthesize performance across all channels, formats, funnel laye
 - Avoid simplistic budget cuts based on surface metrics. Instead, assess whether performance is driven by creative, audience, or channel.
 - Prioritise changes that improve CPA, ROAS, or conversion volume.
 - Reference platform learning, seasonal trends, and scalability potential.
+- Consider audience friction points and ease of action.
 
 **Examples**
-- FY Month 4: Meta contributed 38% of total conversions with ROAS 4.1 and CPA $32. Remarketing drove +22% MoM uplift.
-- FY Week 17: Consideration layer delivered 57% of conversions and 52% of revenue. Carousel formats outperformed Static by +1.3 ROAS.
-- Strategic: Raise frequency on Loyalty Members from 8x to 12x to lift conversion volume by +18%.
-- Audience: Boomers in Awareness layer via Radio (NZME) delivered strong reach (320 TARPs) but low conversion. Recommend shifting 15% to Consideration layer with Static formats.
-- Format: Carousel in Conversion layer with High Intent Shoppers delivered ROAS 4.8 vs Static at 3.2. Recommend scaling Carousel with new creative variants.
+- FY Month 4: Meta contributed 38% of total conversions with ROAS 4.1 and CPA $32. Remarketing drove +22% MoM uplift because Retargeting audiences have high intent and lower acquisition friction.
+- FY Week 17: Consideration layer delivered 57% of conversions and 52% of revenue. Carousel formats outperformed Static by +1.3 ROAS because they tell a story and reduce decision friction.
+- Strategic: Raise frequency on Loyalty Members from 8x to 12x to lift conversion volume by +18% because existing customers have lower barriers to repeat purchase.
+- Audience: Boomers in Awareness layer via Radio (NZME) delivered strong reach (320 TARPs) but low conversion. Recommend shifting 15% to Consideration layer with Static formats because Boomers need clear, trust-building messaging to move to consideration.
+- Format: Carousel in Conversion layer with High Intent Shoppers delivered ROAS 4.8 vs Static at 3.2. Recommend scaling Carousel with new creative variants because the format reduces purchase hesitation by presenting multiple benefits/proof points.
 
-Be concise, visual, and data-driven. Always speak to overarching performance, not isolated campaigns. Use the full schema to reason and recommend.
+Be concise, visual, and data-driven. Always speak to overarching performance, not isolated campaigns. Use the full schema to reason and recommend. Always explain the *why* behind performance drivers from the audience perspective.
 """
 
 # -------------------------------
@@ -262,7 +325,6 @@ def generate_dynamic_chart(user_query, df):
     """Generate a chart based on what the user is asking about"""
     query_lower = user_query.lower()
     
-    # Check what the user is asking about
     if any(word in query_lower for word in ['audience', 'demographic', 'behavioral', 'segment']):
         data = df.groupby('Audience Segment (Demographic)').agg({
             'ROAS': 'mean',
@@ -281,7 +343,7 @@ def generate_dynamic_chart(user_query, df):
         )
         
         return alt.layer(roas_chart, cpa_chart).resolve_scale(y='independent').properties(
-            width=800, height=400, title='Performance by Audience Segment'
+            width=800, height=400
         ).interactive()
     
     elif any(word in query_lower for word in ['strategy', 'retargeting', 'brand lift', 'launch', 'promotion']):
@@ -294,7 +356,7 @@ def generate_dynamic_chart(user_query, df):
             x='Strategy:N',
             y=alt.Y('ROAS:Q', title='Average ROAS'),
             tooltip=['Strategy', alt.Tooltip('ROAS:Q', format='.2f')]
-        ).properties(width=800, height=400, title='Performance by Strategy').interactive()
+        ).properties(width=800, height=400).interactive()
         
         return chart
     
@@ -308,7 +370,7 @@ def generate_dynamic_chart(user_query, df):
             x='Creative Messaging:N',
             y=alt.Y('ROAS:Q', title='Average ROAS'),
             tooltip=['Creative Messaging', alt.Tooltip('ROAS:Q', format='.2f')]
-        ).properties(width=800, height=400, title='Performance by Creative Messaging').interactive()
+        ).properties(width=800, height=400).interactive()
         
         return chart
     
@@ -319,7 +381,7 @@ def generate_dynamic_chart(user_query, df):
             x=alt.X('Publisher:N', sort='-y'),
             y=alt.Y('Spend ($):Q', title='Total Spend'),
             tooltip=['Publisher', alt.Tooltip('Spend ($):Q', format='$,.0f')]
-        ).properties(width=800, height=400, title='Top Publishers by Spend').interactive()
+        ).properties(width=800, height=400).interactive()
         
         return chart
     
@@ -333,7 +395,7 @@ def generate_dynamic_chart(user_query, df):
             x='Format:N',
             y=alt.Y('ROAS:Q', title='Average ROAS'),
             tooltip=['Format', alt.Tooltip('ROAS:Q', format='.2f'), alt.Tooltip('CTR (%):Q', format='.2f')]
-        ).properties(width=800, height=400, title='Performance by Format').interactive()
+        ).properties(width=800, height=400).interactive()
         
         return chart
     
@@ -347,12 +409,11 @@ def generate_dynamic_chart(user_query, df):
             x='Funnel Layer:N',
             y=alt.Y('ROAS:Q', title='Average ROAS'),
             tooltip=['Funnel Layer', alt.Tooltip('ROAS:Q', format='.2f')]
-        ).properties(width=800, height=400, title='Performance by Funnel Layer').interactive()
+        ).properties(width=800, height=400).interactive()
         
         return chart
     
     else:
-        # Default: Publisher ROAS/CPA with dual axis
         data = df.groupby('Publisher').agg({
             'ROAS': 'mean',
             'CPA ($)': 'mean'
@@ -371,52 +432,87 @@ def generate_dynamic_chart(user_query, df):
         )
         
         return alt.layer(roas_chart, cpa_chart).resolve_scale(y='independent').properties(
-            width=800, height=400, title='Publisher Performance (ROAS vs CPA)'
+            width=800, height=400
         ).interactive()
 
 # -------------------------------
-# DISPLAY PREVIOUS MESSAGES
+# MAIN LAYOUT
 # -------------------------------
-for msg in st.session_state.chat_history:
-    if msg["role"] == "assistant":
-        with st.chat_message("assistant"):
-            st.markdown(msg["content"])
-    elif msg["role"] == "user":
+col_main, col_preset = st.columns([3, 1], gap="large")
+
+with col_main:
+    # DISPLAY PREVIOUS MESSAGES
+    for msg in st.session_state.chat_history:
+        if msg["role"] == "assistant":
+            with st.chat_message("assistant"):
+                st.markdown(msg["content"])
+        elif msg["role"] == "user":
+            with st.chat_message("user"):
+                st.markdown(msg["content"])
+
+    # CHAT INPUT
+    user_input = st.chat_input("Ask about performance, ROI, or recommendations...")
+    
+    # Check if rerunning from history
+    if "rerun_question" in st.session_state:
+        user_input = st.session_state.rerun_question
+        del st.session_state.rerun_question
+
+    if user_input:
+        # Add to question history
+        if "question_history" not in st.session_state:
+            st.session_state.question_history = []
+        
+        st.session_state.question_history.append({
+            "text": user_input,
+            "date": datetime.now().date(),
+            "timestamp": datetime.now().isoformat()
+        })
+        
+        st.session_state.chat_history.append({"role": "user", "content": user_input})
         with st.chat_message("user"):
-            st.markdown(msg["content"])
+            st.markdown(user_input)
 
-# -------------------------------
-# CHAT INPUT
-# -------------------------------
-user_input = st.chat_input("Ask about performance, ROI, or recommendations...")
+        with st.chat_message("assistant"):
+            with st.spinner("Analyzing performance..."):
+                try:
+                    response = client.chat.completions.create(
+                        model="llama-3.1-8b-instant",
+                        messages=st.session_state.chat_history
+                    )
+                    output = response.choices[0].message.content
+                    cleaned_output = clean_output(output)
+                    st.markdown(cleaned_output)
+                    
+                    chart = generate_dynamic_chart(user_input, df)
+                    st.altair_chart(chart, use_container_width=True)
+                    
+                    st.session_state.chat_history.append({"role": "assistant", "content": cleaned_output})
+                except Exception as e:
+                    error_str = str(e).lower()
+                    if "rate_limit" in error_str or "rate limit" in error_str or "429" in error_str:
+                        st.warning("⚠️ Too many messages sent. Please wait a moment and try again.")
+                    else:
+                        st.error(f"Error from Groq API: {e}")
 
-if user_input:
-    st.session_state.chat_history.append({"role": "user", "content": user_input})
-    with st.chat_message("user"):
-        st.markdown(user_input)
-
-    with st.chat_message("assistant"):
-        with st.spinner("Analyzing performance..."):
-            try:
-                response = client.chat.completions.create(
-                    model="llama-3.1-8b-instant",
-                    messages=st.session_state.chat_history
-                )
-                output = response.choices[0].message.content
-                cleaned_output = clean_output(output)
-                st.markdown(cleaned_output)
-                
-                # Generate dynamic chart based on user query
-                chart = generate_dynamic_chart(user_input, df)
-                st.altair_chart(chart, use_container_width=True)
-                
-                st.session_state.chat_history.append({"role": "assistant", "content": cleaned_output})
-            except Exception as e:
-                error_str = str(e).lower()
-                if "rate_limit" in error_str or "rate limit" in error_str or "429" in error_str:
-                    st.warning("⚠️ Too many messages sent. Please wait a moment and try again.")
-                else:
-                    st.error(f"Error from Groq API: {e}")
+with col_preset:
+    st.subheader("💡 Quick Questions")
+    
+    preset_questions = [
+        "How is Carousel format performing vs Static?",
+        "What's driving Loyalty Members conversion?",
+        "Which publisher has best ROAS this week?",
+        "How can we improve Awareness layer spend?",
+        "Why is CPA higher for Cart Abandoners?",
+        "What's the Consideration layer momentum?",
+        "Which audience segment is underperforming?",
+        "Should we scale Video or cut Static?"
+    ]
+    
+    for question in preset_questions:
+        if st.button(question, use_container_width=True, key=f"preset_{question}"):
+            st.session_state.rerun_question = question
+            st.rerun()
 
 # -------------------------------
 # LEGAL DISCLAIMER
