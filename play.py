@@ -92,7 +92,7 @@ with st.sidebar:
     
     if today_questions:
         st.markdown("**Today**")
-        for q in reversed(today_questions[-5:]):  # Show last 5
+        for q in reversed(today_questions[-5:]):
             if st.button(q["text"][:50] + "..." if len(q["text"]) > 50 else q["text"], 
                         key=f"today_{q['timestamp']}",
                         use_container_width=True):
@@ -101,7 +101,7 @@ with st.sidebar:
     
     if yesterday_questions:
         st.markdown("**Yesterday**")
-        for q in reversed(yesterday_questions[-5:]):  # Show last 5
+        for q in reversed(yesterday_questions[-5:]):
             if st.button(q["text"][:50] + "..." if len(q["text"]) > 50 else q["text"], 
                         key=f"yesterday_{q['timestamp']}",
                         use_container_width=True):
@@ -143,6 +143,7 @@ Your role is to synthesize performance across all channels, formats, funnel laye
 - Total Annual Investment: $285M across 6 campaigns
 - Publishers: Meta, Google, YouTube, TikTok, LinkedIn, TVNZ, NZ Herald
 - 7 Publishers, 6 Campaigns, 52 Weeks, 3 Funnel Layers, 4 Formats
+
 1. **ANZ Home Loans - First Home Buyers** ($80M | Feb-Jun | 25-44)
    - Objective: Drive consideration and enquiries for ANZ home loans with first-home buyers and refinancers
    - Channels: TVNZ, YouTube, Meta, Google, NZ Herald
@@ -243,25 +244,7 @@ NZ Herald:
 - Q3 (Oct-Dec, Weeks 27-39): 1.15x - Year-end push, holiday spending
 - Q4 (Jan-Mar, Weeks 40-52): 0.70-1.10x - Summer lull in Jan, Feb home buying recovery
 
-**Executive Overview**
-- Summarize performance across the latest fiscal month or week (e.g., FY Month 4, Week 17).
-- Quantify key shifts in ROAS, CPA, CTR, spend, and revenue.
-- Highlight top-performing funnel layers, formats, and publishers.
-- Frame commentary in terms of business impact, efficiency, and momentum.
-
-**Insight**
-- Use charts and graphs to visualize topline metrics (e.g., spend, revenue, ROAS, CTR, CPA).
-- Segment by:
-  - Funnel Layer: Awareness, Consideration, Conversion
-  - Format: Video, Static, Carousel, Interactive, Radio
-  - Strategy: Retargeting, Brand Lift, Product Launch, Offer Promotion
-  - Publisher: Meta, YouTube, NZ Herald, NZME Radio, etc.
-  - Audience Segment (Demographic): e.g., Millennials, Boomers, Parents with Kids
-  - Audience Segment (Behavioral): e.g., High Intent Shoppers, Cart Abandoners, Loyalty Members
-- Always compare like-for-like when evaluating performance — e.g., Video vs Video, Carousel vs Static, Awareness vs Awareness — to ensure recommendations are contextually valid.
-- Use schema fields to explain performance drivers — e.g., "CPA improved due to Loyalty Members in Conversion layer via Meta Carousel because the format reduces friction and builds confidence."
-- Reference fiscal trends (MoM, WoW, FY-to-date) and NZ-specific media norms (e.g., radio TARPs, seasonal shifts).
-- Where possible, include at least one visualisation to support your insight. If this isn't a chart, a table is fine.
+**Response Structure**
 
 Every response should include:
 
@@ -271,17 +254,15 @@ Every response should include:
    - Highlight top-performing campaigns, publishers, and funnel layers
    - Frame in terms of business impact and efficiency
 
-2. **Performance Insight** (Based on visualization)
-   - Reference the chart shown
+2. **Performance Insight**
    - Segment analysis by campaign, publisher, format, funnel, or audience
-   - Use actual numbers and percentages
+   - Use actual numbers and percentages from the data
    - Compare like-for-like (e.g., Video vs Video, not Video vs Search)
    - Explain performance drivers from audience psychology perspective
    - Reference fiscal trends (MoM, WoW, FY-to-date)
 
 3. **Strategic Recommendations** (2-4 actionable tactics)
    - Provide quantified impact (e.g., "Shift 15% of Home Loans spend from TVNZ to Google Search to improve CPA by $85")
-   - Base recommendations on the chart insights
    - Recommend optimizations across:
      * Budget allocation between campaigns/channels
      * Creative format testing
@@ -299,25 +280,7 @@ When asked about investment levels ($100M, $200M, $300M):
 - $200M scenario: Balanced portfolio, prioritize Conversion campaigns
 - $300M scenario: Full portfolio with Awareness investment, scale proven channels
 
-**Examples**
-
-- "Home Loans campaign delivered $28M in conversions at 8.5 ROAS in April-May (Weeks 1-8), driven by 25-34 First Home Buyers on Google Search with Life Moments creative because this audience is actively researching purchase decisions and responds to emotional triggers."
-
-- "Business Banking achieved $42M revenue on $2.1M weekly spend via LinkedIn, outperforming YouTube by 2.3x ROAS because LinkedIn reaches decision-makers in professional context with Trust & Heritage messaging that reinforces ANZ's SME expertise."
-
-- "Airpoints Visa conversion rate increased 18% MoM in September (Week 23) as 18-24 audience on TikTok responded to Rewards-focused creative with Carousel format, which showcases multiple card benefits and reduces decision friction for this digitally native segment."
-
 Be concise, quantified, and strategic. Always explain the *why* behind performance from the audience perspective. Reference specific campaigns, publishers, and time periods. Speak to portfolio-level performance, not isolated tactics.
-
-- Avoid simplistic budget cuts based on surface metrics. Instead, assess whether performance is driven by creative, audience, or channel.
-- Consider audience friction points and ease of action.
-
-**Examples**
-- FY Month 4: Meta contributed 38% of total conversions with ROAS 4.1 and CPA $32. Remarketing drove +22% MoM uplift because Retargeting audiences have high intent and lower acquisition friction.
-- FY Week 17: Consideration layer delivered 57% of conversions and 52% of revenue. Carousel formats outperformed Static by +1.3 ROAS because they tell a story and reduce decision friction.
-- Strategic: Raise frequency on Loyalty Members from 8x to 12x to lift conversion volume by +18% because existing customers have lower barriers to repeat purchase.
-- Audience: Boomers in Awareness layer via Radio (NZME) delivered strong reach (320 TARPs) but low conversion. Recommend shifting 15% to Consideration layer with Static formats because Boomers need clear, trust-building messaging to move to consideration.
-- Format: Carousel in Conversion layer with High Intent Shoppers delivered ROAS 4.8 vs Static at 3.2. Recommend scaling Carousel with new creative variants because the format reduces purchase hesitation by presenting multiple benefits/proof points.
 
 **CRITICAL: Never include any chart descriptions, "[Insert Chart]" placeholders, or visualization references. Text analysis only.**
 """
@@ -412,42 +375,42 @@ def generate_data():
     campaign_timing = {
         "ANZ Airpoints Visa - New Customer Acquisition": {
             "weeks": list(range(23, 31)),
-            "budget": 25000000,  # $25M
+            "budget": 25000000,
             "audiences": ["18-24", "25-34", "35-44"],
             "channels": ["Meta", "Google", "TikTok", "NZ Herald"],
             "primary_funnel": "Conversion"
         },
         "ANZ goMoney App - Download & Activation": {
             "weeks": list(range(1, 13)),
-            "budget": 15000000,  # $15M
+            "budget": 15000000,
             "audiences": ["18-24", "25-34", "35-44"],
             "channels": ["Meta", "Google", "TikTok", "YouTube", "TVNZ"],
             "primary_funnel": "Conversion"
         },
         "ANZ Home Loans - First Home Buyers": {
             "weeks": list(range(44, 53)) + list(range(1, 13)),
-            "budget": 80000000,  # $80M
+            "budget": 80000000,
             "audiences": ["25-34", "35-44"],
             "channels": ["TVNZ", "YouTube", "Meta", "Google", "NZ Herald"],
             "primary_funnel": "Consideration"
         },
         "ANZ Business Banking - SME Acquisition": {
             "weeks": list(range(1, 53)),
-            "budget": 65000000,  # $65M
+            "budget": 65000000,
             "audiences": ["35-44", "45-54"],
             "channels": ["LinkedIn", "Google", "NZ Herald", "YouTube"],
             "primary_funnel": "Consideration"
         },
         "ANZ Personal Banking - Account Switching": {
             "weeks": list(range(1, 53)),
-            "budget": 45000000,  # $45M
+            "budget": 45000000,
             "audiences": ["25-34", "35-44", "45-54"],
             "channels": ["Meta", "Google", "YouTube", "NZ Herald"],
             "primary_funnel": "Conversion"
         },
         "ANZ KiwiSaver - Enrollment Drive": {
             "weeks": list(range(44, 53)) + list(range(1, 13)),
-            "budget": 55000000,  # $55M
+            "budget": 55000000,
             "audiences": ["18-24", "25-34", "35-44", "45-54"],
             "channels": ["TVNZ", "YouTube", "Meta", "Google", "NZ Herald"],
             "primary_funnel": "Consideration"
@@ -920,11 +883,8 @@ df = generate_data()
 def clean_output(text):
     """Remove all chart placeholder text from AI output"""
     import re
-    # Remove [Insert Chart X: ...] patterns
     text = re.sub(r'\[Insert Chart \d+:.*?\]', '', text, flags=re.DOTALL)
-    # Remove <Chart: ...> patterns
     text = re.sub(r'<Chart:.*?>', '', text, flags=re.DOTALL)
-    # Remove any lingering chart references
     lines = text.split('\n')
     cleaned_lines = [line for line in lines if not line.strip().startswith('<Chart') and not line.strip().startswith('[Insert Chart')]
     return '\n'.join(cleaned_lines).strip()
@@ -1000,7 +960,6 @@ def generate_dynamic_chart(user_query, df):
     
     # Churn analysis by month
     elif any(word in query_lower for word in ['churn', 'month', 'highest churn', 'internal', 'external', 'driver']):
-        # Group by month (convert week to month approximation)
         df_copy = df.copy()
         df_copy['Month'] = ((df_copy['Week'] - 1) // 4) + 1
         data = df_copy.groupby('Month').agg({
@@ -1013,7 +972,6 @@ def generate_dynamic_chart(user_query, df):
         if data.empty:
             return None
         
-        # Calculate churn proxy (inverse of conversions normalized)
         data['Churn Index'] = 100 - (data['Conversions'] / data['Conversions'].max() * 100)
         
         chart = alt.Chart(data).mark_line(point=True, color='#ef4444', size=3).encode(
@@ -1108,7 +1066,6 @@ def generate_dynamic_chart(user_query, df):
 # MAIN LAYOUT
 # -------------------------------
 
-# Share button in top right
 col_title, col_share = st.columns([6, 1])
 with col_title:
     st.title("")
@@ -1118,7 +1075,6 @@ with col_share:
         st.code(current_url, language=None)
         st.success("Link ready to share!")
 
-# DISPLAY PREVIOUS MESSAGES
 for msg in st.session_state.chat_history:
     if msg["role"] == "assistant":
         with st.chat_message("assistant"):
@@ -1127,17 +1083,14 @@ for msg in st.session_state.chat_history:
         with st.chat_message("user"):
             st.markdown(msg["content"])
 
-# Check if rerunning from history
 preset_input = None
 if "rerun_question" in st.session_state:
     preset_input = st.session_state.rerun_question
     del st.session_state.rerun_question
 
-# Initialize chat started flag
 if "chat_started" not in st.session_state:
     st.session_state.chat_started = False
 
-# Quick Questions - Only show if chat hasn't started
 if not st.session_state.chat_started:
     st.markdown("### 💡 Quick Questions")
     preset_questions = [
@@ -1152,7 +1105,6 @@ if not st.session_state.chat_started:
             preset_input = question
             st.session_state.chat_started = True
 else:
-    # Show questions in sidebar when chat has started
     with st.sidebar:
         st.divider()
         st.subheader("💡 Quick Questions")
@@ -1167,15 +1119,12 @@ else:
             if st.button(question, use_container_width=True, key=f"sidebar_preset_{question}"):
                 preset_input = question
 
-# CHAT INPUT
 user_input = st.chat_input("Select a prompt above or type your custom prompt here")
 
-# Use preset input if a button was clicked
 if preset_input:
     user_input = preset_input
 
 if user_input:
-    # Add to question history
     if "question_history" not in st.session_state:
         st.session_state.question_history = []
     
@@ -1212,9 +1161,6 @@ if user_input:
                 else:
                     st.error(f"Error from Groq API: {e}")
 
-# -------------------------------
-# LEGAL DISCLAIMER
-# -------------------------------
 st.markdown("---")
 st.markdown("""
 <div style="background-color: #481d00; margin-bottom: 32px; padding: 16px; font-size: 14px; border-radius: 8px;">
