@@ -133,7 +133,6 @@ client = Groq(api_key=api_key)
 # -------------------------------
 # SYSTEM PROMPT
 # -------------------------------
-
 system_prompt = """
 You are the ANZ Conversational Analytics tool — a senior strategist delivering enterprise-level marketing intelligence to C-suite stakeholders across Media, Marketing, CRM, Loyalty, and Finance.
 
@@ -285,8 +284,6 @@ Be concise, quantified, and strategic. Always explain the *why* behind performan
 
 **CRITICAL: Never include any chart descriptions, "[Insert Chart]" placeholders, or visualization references. Text analysis only.**
 """
-
-
 # -------------------------------
 # CHAT MEMORY
 # -------------------------------
@@ -690,11 +687,10 @@ if "chat_started" not in st.session_state:
 if not st.session_state.chat_started:
     st.markdown("### 💡 Quick Questions")
     preset_questions = [
-        "💰 Recommend optimal channel mixes for $100M, $200M, and $300M investment levels.",
+        "💰 Recommend optimal channel mixes for $100 million, $200 million, and $300 million investment levels.",
         "📊 Determine which formats delivered the highest ROI and CPA.",
         "🎯 Evaluate channels & publishers with the strongest click-to-conversion rates.",
         "📉 Highlight months with the highest churn and distinguish internal vs. external drivers.",
-        "🎥 Is Video or Static driving higher engagement?",
         "👥 Which audience segment is underperforming?",
         "📱 What's driving ROAS on Social vs Display?"
     ]
@@ -714,13 +710,12 @@ else:
         st.divider()
         st.subheader("💡 Quick Questions")
         preset_questions = [
-            "💰 Recommend optimal channel mixes for $100M, $200M, and $300M investment levels.",
-            "📊 Determine which formats delivered the highest ROI and CPA.",
-            "🎯 Evaluate channels & publishers with the strongest click-to-conversion rates.",
-            "📉 Highlight months with the highest churn and distinguish internal vs. external drivers.",
-            "🎥 Is Video or Static driving higher engagement?",
-            "👥 Which audience segment is underperforming?",
-            "📱 What's driving ROAS on Social vs Display?"
+        "💰 Recommend optimal channel mixes for $100 million, $200 million, and $300 million investment levels.",
+        "📊 Determine which formats delivered the highest ROI and CPA.",
+        "🎯 Evaluate channels & publishers with the strongest click-to-conversion rates.",
+        "📉 Highlight months with the highest churn and distinguish internal vs. external drivers.",
+        "👥 Which audience segment is underperforming?",
+        "📱 What's driving ROAS on Social vs Display?"
         ]
         
         for question in preset_questions:
@@ -752,7 +747,7 @@ if user_input:
         st.markdown(user_input)
 
     with st.chat_message("assistant"):
-        with st.spinner("Analyzing performance..."):
+        with st.spinner("Analysing performance..."):
             try:
                 response = client.chat.completions.create(
                     model="llama-3.1-8b-instant",
