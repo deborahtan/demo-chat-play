@@ -1070,7 +1070,7 @@ col_title, col_share = st.columns([6, 1])
 with col_title:
     st.title("")
 with col_share:
-    current_url = "https://dentsu-analytics.streamlit.app"
+    current_url = "https://dentsusolutions.com/"
     if st.button("🔗 Share", use_container_width=True):
         st.code(current_url, language=None)
         st.success("Link ready to share!")
