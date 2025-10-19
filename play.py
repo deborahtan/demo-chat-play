@@ -274,16 +274,17 @@ Every response should include:
 
 **CRITICAL: Investment Scenario Planning**
 
-When asked about investment levels ($100M, $200M, $300M):
+When asked about investment levels ($100 million, $200 million, $300 million):
 - Current state: $285M baseline performance
-- $100M scenario: Focus on highest ROAS channels (Google Search, Meta), cut underperformers
-- $200M scenario: Balanced portfolio, prioritize Conversion campaigns
-- $300M scenario: Full portfolio with Awareness investment, scale proven channels
+- $100 million scenario: Focus on highest ROAS channels (Google Search, Meta), cut underperformers
+- $200 million scenario: Balanced portfolio, prioritize Conversion campaigns
+- $300 million scenario: Full portfolio with Awareness investment, scale proven channels
 
 Be concise, quantified, and strategic. Always explain the *why* behind performance from the audience perspective. Reference specific campaigns, publishers, and time periods. Speak to portfolio-level performance, not isolated tactics.
 
 **CRITICAL: Never include any chart descriptions, "[Insert Chart]" placeholders, or visualization references. Text analysis only.**
 """
+
 # -------------------------------
 # CHAT MEMORY
 # -------------------------------
@@ -687,12 +688,13 @@ if "chat_started" not in st.session_state:
 if not st.session_state.chat_started:
     st.markdown("### 💡 Quick Questions")
     preset_questions = [
-        "💰 Recommend optimal channel mixes for $100 million, $200 million, and $300 million investment levels.",
-        "📊 Determine which formats delivered the highest ROI and CPA.",
-        "🎯 Evaluate channels & publishers with the strongest click-to-conversion rates.",
-        "📉 Highlight months with the highest churn and distinguish internal vs. external drivers.",
-        "👥 Which audience segment is underperforming?",
-        "📱 What's driving ROAS on Social vs Display?"
+          "💰 Recommend optimal channel mixes for $100 million, $200 million, and $300 million investment levels.",
+          "📊 Determine which formats delivered the highest ROI and CPA.",
+          "🎯 Evaluate channels & publishers with the strongest click-to-conversion rates.",
+          "📉 Highlight months with the highest churn and distinguish internal vs. external drivers.",
+          "🎥 Is Video or Static driving higher engagement?",
+          "👥 Which audience segment is underperforming?",
+          "📱 What's driving ROAS on Social vs Display?"
     ]
 
     # Create centered container for questions
@@ -710,12 +712,13 @@ else:
         st.divider()
         st.subheader("💡 Quick Questions")
         preset_questions = [
-        "💰 Recommend optimal channel mixes for $100 million, $200 million, and $300 million investment levels.",
-        "📊 Determine which formats delivered the highest ROI and CPA.",
-        "🎯 Evaluate channels & publishers with the strongest click-to-conversion rates.",
-        "📉 Highlight months with the highest churn and distinguish internal vs. external drivers.",
-        "👥 Which audience segment is underperforming?",
-        "📱 What's driving ROAS on Social vs Display?"
+            "💰 Recommend optimal channel mixes for $100 million, $200 million, and $300 million investment levels.",
+            "📊 Determine which formats delivered the highest ROI and CPA.",
+            "🎯 Evaluate channels & publishers with the strongest click-to-conversion rates.",
+            "📉 Highlight months with the highest churn and distinguish internal vs. external drivers.",
+            "🎥 Is Video or Static driving higher engagement?",
+            "👥 Which audience segment is underperforming?",
+            "📱 What's driving ROAS on Social vs Display?"
         ]
         
         for question in preset_questions:
@@ -747,7 +750,7 @@ if user_input:
         st.markdown(user_input)
 
     with st.chat_message("assistant"):
-        with st.spinner("Analysing performance..."):
+        with st.spinner("Analyzing performance..."):
             try:
                 response = client.chat.completions.create(
                     model="llama-3.1-8b-instant",
