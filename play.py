@@ -308,9 +308,9 @@ def generate_data():
     strategies = ["Retargeting", "Brand Lift", "Product Launch", "Offer Promotion"]
     funnel_layers = ["Awareness", "Consideration", "Conversion"]
     formats = ["Video", "Static", "Carousel", "Interactive", "Radio"]
-    creative_messaging = ["Value-led", "Urgency-led", "Emotional", "Informational"]
-    demo_segments = ["Millennials", "Boomers", "Parents with Kids"]
-    behav_segments = ["High Intent Shoppers", "Cart Abandoners", "Loyalty Members"]
+    creative_messaging = ["Trust-led", "Incentive-led", "Convenience-led", "Benefit-led"]
+    demo_segments = ["First Home Buyers (25-34)", "Mortgage Refinancers (35-44)", "Wealth Builders (45-54)", "Young Professionals (25-34)", "Pre-retirees (55+)"]
+    behav_segments = ["In-Market Researchers", "Decision-Ready", "Existing Customers"]
 
     rows = []
     for i in range(len(weeks)):
@@ -324,12 +324,21 @@ def generate_data():
         behav = behav_segments[i % 3]
 
         base_spend = {
-            "Awareness": 100_000,
-            "Consideration": 250_000,
-            "Conversion": 500_000
+            "Awareness": 150_000,
+            "Consideration": 375_000,
+            "Conversion": 750_000
         }[funnel]
 
-        seasonal_multiplier = 1.25 if week >= 40 else 1.0
+        # Seasonal multipliers (NZ Banking)
+        if 1 <= week <= 12:
+            seasonal_multiplier = 1.25  # Q1: Tax time, KiwiSaver peak, home buying season
+        elif 13 <= week <= 26:
+            seasonal_multiplier = 0.85  # Q2: Winter lull, lowest activity
+        elif 27 <= week <= 39:
+            seasonal_multiplier = 1.15  # Q3: Year-end push, holiday spending
+        else:  # weeks 40-52
+            seasonal_multiplier = 1.05  # Q4: Summer lull in Jan, Feb home buying recovery
+        
         spend = base_spend * seasonal_multiplier
 
         ctr_lookup = {
@@ -470,21 +479,18 @@ df = generate_data()
 def clean_output(text):
     """Remove formatting artifacts and chart placeholders from AI output"""
     import re
-    
     # Remove [Insert Chart X: ...] patterns
     text = re.sub(r'\[Insert Chart \d+:.*?\]', '', text, flags=re.DOTALL)
     # Remove <Chart: ...> patterns
     text = re.sub(r'<Chart:.*?>', '', text, flags=re.DOTALL)
     
-    # FIX: Clean up broken spacing in numbers/currency (the main issue)
-    # Handles: "$285million" → "$285 million", "million investment" spacing
+    # Clean up broken spacing in numbers/currency 
     text = re.sub(r'(\d)([a-z])', r'\1 \2', text)  # "$285million" → "$285 million"
-    text = re.sub(r'(\w)\s{2,}(\w)', r'\1 \2', text)  # Multiple spaces → single space
+    text = re.sub(r'(\w)\s{2,}(\w)', r'\1 \2', text)  # Multiple spaces → single
     
     # Remove any lingering chart references
     lines = text.split('\n')
     cleaned_lines = [line for line in lines if not line.strip().startswith('<Chart') and not line.strip().startswith('[Insert Chart')]
-    
     return '\n'.join(cleaned_lines).strip()
 
 def generate_dynamic_chart(user_query, df):
@@ -696,13 +702,13 @@ if "chat_started" not in st.session_state:
 if not st.session_state.chat_started:
     st.markdown("### 💡 Quick Questions")
     preset_questions = [
-          "💰 Recommend optimal channel mixes for $100 million, $200 million, and $300 million investment levels.",
-          "📊 Determine which formats delivered the highest ROI and CPA.",
-          "🎯 Evaluate channels & publishers with the strongest click-to-conversion rates.",
-          "📉 Highlight months with the highest churn and distinguish internal vs. external drivers.",
-          "🎥 Is Video or Static driving higher engagement?",
-          "👥 Which audience segment is underperforming?",
-          "📱 What's driving ROAS on Social vs Display?"
+        "💰 Recommend optimal channel mixes for $100M, $200M, and $300M investment levels.",
+        "📊 Determine which formats delivered the highest ROI and CPA.",
+        "🎯 Evaluate channels & publishers with the strongest click-to-conversion rates.",
+        "📉 Highlight months with the highest churn and distinguish internal vs. external drivers.",
+        "🎥 Is Video or Static driving higher engagement?",
+        "👥 Which audience segment is underperforming?",
+        "📱 What's driving ROAS on Social vs Display?"
     ]
 
     # Create centered container for questions
@@ -720,7 +726,7 @@ else:
         st.divider()
         st.subheader("💡 Quick Questions")
         preset_questions = [
-            "💰 Recommend optimal channel mixes for $100 million, $200 million, and $300 million investment levels.",
+            "💰 Recommend optimal channel mixes for $100M, $200M, and $300M investment levels.",
             "📊 Determine which formats delivered the highest ROI and CPA.",
             "🎯 Evaluate channels & publishers with the strongest click-to-conversion rates.",
             "📉 Highlight months with the highest churn and distinguish internal vs. external drivers.",
@@ -758,7 +764,7 @@ if user_input:
         st.markdown(user_input)
 
     with st.chat_message("assistant"):
-        with st.spinner("Analyzing performance..."):
+        with st.spinner("Analysing performance..."):
             try:
                 response = client.chat.completions.create(
                     model="llama-3.1-8b-instant",
