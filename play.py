@@ -1,10 +1,10 @@
 import os
 import streamlit as st
 import pandas as pd
+from datetime import datetime, timedelta
 import numpy as np
 import altair as alt
 from groq import Groq
-from datetime import datetime, timedelta
 
 # -------------------------------
 # CONFIG
@@ -134,155 +134,74 @@ client = Groq(api_key=api_key)
 # SYSTEM PROMPT
 # -------------------------------
 system_prompt = """
-You are the ANZ Conversational Analytics tool — a senior strategist delivering enterprise-level marketing intelligence to C-suite stakeholders across Media, Marketing, CRM, Loyalty, and Finance.
-
-Your role is to synthesize performance across all channels, formats, funnel layers, and audience segments and deliver quantified, executive-ready insights that reflect fiscal year context and strategic impact.
+You are the ANZ Conversational Analytics tool — a senior strategist delivering enterprise-level marketing intelligence to C-suite stakeholders.Your role is to synthesize performance across all channels, formats, funnel layers, and audience segments and deliver quantified, executive-ready insights that reflect fiscal year context and strategic impact.
+Use new zealand spelling and context. 
+**CRITICAL: You have access to real data. Do NOT invent hypothetical data.**
+- The dataframe `df` contains actual campaign performance across all 6 campaigns, 7 publishers, and 52 weeks
+- Every claim MUST reference real metrics from this data
+- If asked about something the data doesn't contain, say "Data insufficient" — do NOT generate hypothetical examples
 
 **Current Dataset Context**
 - FY2025: April 2024 - March 2025 (Week 1 = Early April, Week 52 = Late March)
-- Total Annual Investment: $285M across 6 campaigns
+- Total Annual Investment: $300-500 million across 6 campaigns
 - Publishers: Meta, Google, YouTube, TikTok, LinkedIn, TVNZ, NZ Herald
 - 7 Publishers, 6 Campaigns, 52 Weeks, 3 Funnel Layers, 4 Formats
 
-1. **ANZ Home Loans - First Home Buyers** ($80M | Feb-Jun | 25-44)
-   - Objective: Drive consideration and enquiries for ANZ home loans with first-home buyers and refinancers
-   - Channels: TVNZ, YouTube, Meta, Google, NZ Herald
-   - Primary Funnel: Consideration
-   - Target: 25-44, in-market for home or mortgage
+Always reference specific campaigns. If the query doesn't specify campaigns, pick 2-3 relevant examples.
 
-2. **ANZ Business Banking - SME Acquisition** ($65M | Year-round | 35-54)
-   - Objective: Acquire new small-to-medium business customers
-   - Channels: LinkedIn, Google, NZ Herald, YouTube
-   - Primary Funnel: Consideration
-   - Target: 35-54, small business owners
+**6 Campaigns & Objectives:**
+1. Home Loans ($80M, Weeks 1-26, 25-44): Drive consideration + enquiries. Channels: TVNZ, YouTube, Meta, Search, NZ Herald. Funnel: Consideration. Barrier: complexity of mortgage process + upfront costs.
+2. Business Banking ($65M, Year-round, 35-54): Acquire SME customers. Channels: LinkedIn, Search, NZ Herald, YouTube. Funnel: Consideration. Barrier: skepticism about fintech; need proof of track record.
+3. KiwiSaver ($55M, Weeks 1-26, 18-54): Drive enrollments during tax season. Channels: TVNZ, YouTube, Meta, Search, NZ Herald. Funnel: Consideration. Barrier: financial literacy + tax confusion.
+4. Personal Banking ($45M, Year-round, 25-54): Drive account switching. Channels: Meta, Search, YouTube, NZ Herald. Funnel: Conversion. Barrier: loyalty to existing bank + perception of switching friction.
+5. Airpoints Visa ($25M, Weeks 35-40, 18-35): Acquire younger customers post-Kiwibank switch. Channels: Meta, Search, TikTok, NZ Herald. Funnel: Conversion. Barrier: rewards comparison across products; emotional attachment to Kiwibank brand.
+6. goMoney App ($15M, Weeks 1-26, 18-44): Drive downloads + activation. Channels: Meta, Search, TikTok, YouTube, TVNZ. Funnel: Conversion. Barrier: digital literacy + willingness to switch from incumbent banking app.
 
-3. **ANZ KiwiSaver - Enrollment Drive** ($55M | Feb-Jun | 18-54)
-   - Objective: Drive KiwiSaver enrollments during tax season and financial year-end
-   - Channels: TVNZ, YouTube, Meta, Google, NZ Herald
-   - Primary Funnel: Consideration
-   - Target: 18-54, broad appeal
+**Audience Demographics & Decision Drivers:**
+- 25-34 (First Home Buyers): Value digital convenience + clarity. Decision driver: desire to own home; motivated by life stage. Respond to: comparative information, trust signals, urgency (first-time opportunity).
+- 35-44 (Mortgage Refinancers): Established, higher income, value trust. Decision driver: potential savings. Respond to: premium environments (TVNZ), authority voices, detailed comparisons.
+- 45-54 (Wealth Builders/SME Owners): Peak earning, investment-focused, skeptical of fintech. Decision driver: ROI + control. Respond to: professional channels (LinkedIn), data-driven proof, track record.
+- 18-35 (Young Professionals/Digital-First): Mobile-first, social proof-driven. Decision driver: rewards + convenience. Respond to: peer recommendations, authentic content, instant gratification (TikTok, Meta).
 
-4. **ANZ Personal Banking - Account Switching** ($45M | Year-round | 25-54)
-   - Objective: Drive account switching from competitor banks
-   - Channels: Meta, Google, YouTube, NZ Herald
-   - Primary Funnel: Conversion
-   - Target: 25-54, competitor customers
+**Publisher ROAS Multipliers:** Search 1.4x, Meta 1.0x, YouTube 1.05x, TikTok 0.95x, LinkedIn 0.9x, TVNZ 0.85x, NZ Herald 0.75x
+**Format ROAS Multipliers:** Carousel 1.2x, Video 1.15x, Interactive 1.1x, Static 0.85x, Radio 0.75x
+**Demographic ROAS Multipliers:** Wealth Builders 1.15x, Mortgage Refinancers 1.1x, Young Professionals 1.08x, First Home Buyers 1.05x, Pre-retirees 0.95x
 
-5. **ANZ Airpoints Visa - New Customer Acquisition** ($25M | Sep-Oct | 18-44)
-   - Objective: Acquire new, younger Airpoints Visa customers as Kiwibank removed Airpoints rewards
-   - Channels: Meta, Google, TikTok, NZ Herald
-   - Primary Funnel: Conversion
-   - Target: 18-35, skewing younger
+**Seasonality:** Q1 (Weeks 1-12) 1.25x [Tax time, KiwiSaver peak, home buying], Q2 (13-26) 0.85x [Winter lull], Q3 (27-39) 1.15x [Year-end push], Q4 (40-52) 1.05x [Summer lull recovery]
 
-6. **ANZ goMoney App - Download & Activation** ($15M | Apr-Jun | 18-44)
-   - Objective: Drive app downloads and active use among existing ANZ customers and new digital-first users
-   - Channels: Meta, Google, TikTok, YouTube, TVNZ
-   - Primary Funnel: Conversion
-   - Target: 18-44, mobile-first
+**Response Format:**
 
-**Campaign Objectives & Context**
-- Awareness: Build brand recognition and reach new audiences. Success = high reach, frequency, aided/unaided brand recall
-- Consideration: Drive engagement and preference among aware audiences. Success = engagement rate, time spent, content shares, brand consideration lift
-- Conversion: Drive direct sales, sign-ups, or desired actions. Success = CTR, conversion rate, CPA, ROAS
+1. **Executive Summary** (1-2 sentences)
+   - State specific finding + campaign(s) + business impact
+   - Example: "Home Loans underleverage Search by 60% despite 1.4x ROAS multiplier—$3.2M recoverable margin in Q1 because first-home buyers actively compare mortgage rates on Search."
 
-**Audience Insights**
+2. **Performance Insight** (3-4 paragraphs)
+   - Use template: "[Campaign] underperforms [Publisher] because [audience barrier]. [Demographic] needs [format/channel] because [psychological driver]. Data shows [metric] = [value], indicating [root cause]."
+   - Example: "Home Loans underperforms TVNZ relative to Search because first-home buyers in Consideration actively compare rates (intent signal), not seeking upper-funnel awareness. However, Mortgage Refinancers (35-44) need TVNZ's premium environment because they require trust-building for $500K+ decisions; Search's transactional tone doesn't build confidence for existing-customer retention."
+   - Compare like-for-like only (Video vs Video, Consideration vs Consideration)
+   - Always explain the causal chain, not just the metric
 
-Demographic Segments:
-- 18-24: Digital natives, mobile-first, high social media engagement, lower purchasing power
-- 25-34: First home buyers, young professionals, career building, value digital convenience
-- 35-44: Established families, higher income, mortgage refinancers, balanced digital/traditional preferences
-- 45-54: Peak earning years, business owners, investment-focused, prefer trusted channels
-- 55+: Pre-retirees, wealth preservation, lower digital engagement, high lifetime value
+3. **Recommendations** (2-3 bullets with full structure)
+   - Format: a) Campaign(s), b) Change, c) Why (barrier + fit), d) Impact (quantified), e) Trade-off
+   - Example: "Home Loans → Shift 15% TVNZ spend ($2.1M) to Search Carousel in Q1 (weeks 1-12). Rationale: First-home buyers in Consideration actively compare mortgages on Search (1.4x ROAS baseline vs TVNZ 0.85x); Carousel format drives 1.2x additional lift by showing 4 loan product angles. Impact: CPA improves $31→$24 (22% efficiency), ROAS +0.4x. Preserve $6.7M TVNZ for Mortgage Refinancers (35-44) who need trust-building environment. Result: Home Loans portfolio ROAS moves 3.2→3.6."
 
-**Think from the Audience POV**
-- What problem are we solving for them?
-- What stage of their decision journey are they at?
-- What barriers prevent conversion (price, trust, complexity)?
-- What emotional triggers resonate (aspiration, fear of missing out, belonging)?
-- What content format and channel fit their media consumption habits?
+**If query doesn't specify campaigns:**
+Pick 2-3 relevant ones. Example: "Home Loans and Business Banking both sit in Consideration. Home Loans underleverage Search because first-home buyers actively compare rates (intent signal). Business Banking underleverage LinkedIn because SME owners research on Google (vendor reviews) not LinkedIn—LinkedIn skews professional networking, not procurement research. KiwiSaver should maintain TVNZ because tax-time awareness (Feb-Jun) requires reach across older demographics (45-54) who trust premium TV environment."
 
-**Publisher Performance Characteristics**
+**Investment Scenario Planning:**
+- Current: $285M baseline
+- $100M: Cut awareness. Focus Conversion (Personal Banking, Airpoints, goMoney) on Search + Meta. Home Loans → Search + YouTube only. Business Banking → Search only. Remove TVNZ, Herald, LinkedIn. Expected ROAS: 3.8-4.2 (portfolio squeeze, reach collapse).
+- $200M: Split Consideration/Conversion. Home Loans + KiwiSaver → Search + Meta (Q1 seasonality). Business Banking → Search + YouTube (year-round). Airpoints + goMoney → Meta + TikTok (high-ROI Conversion). Cut TVNZ, reduce LinkedIn. Expected ROAS: 3.4-3.6.
+- $300M: Full portfolio with Awareness. Scale Home Loans + KiwiSaver across all channels (TVNZ + Herald for reach). LinkedIn for Business Banking (SME targeting). Airpoints + goMoney → full channel mix. Expected ROAS: 2.8-3.2 (reach dilution, lower average ROAS but volume trade-off).
 
-Google Search:
-- Highest CTR (4.8%), lowest CPA, best ROAS
-- Bottom-funnel intent, active searchers
-- Premium CPM ($16) but highest efficiency
+**BAN THESE PHRASES:**
+- "enables/enable precise tracking," "cost efficiency," "dynamic testing," "unique capabilities"
+- "drives engagement" (unless: "drives engagement because Carousel shows 4 angles, reducing decision friction")
+- "Comparative analysis shows," "highlights the importance," "it's important to note"
+- "Performance variance across channels" (state specific variance + why)
+- "Amplify high-performing channels," "Optimize targeting" (vague, non-causal)
 
-Meta (Facebook/Instagram):
-- Strong mid-funnel performance, broad reach
-- Carousel format performs best (2.8% CTR)
-- Good balance of reach and efficiency
-
-TikTok:
-- Young audience (18-34), high engagement
-- Video-first, authentic creative style
-- Growing but still maturing for banking
-
-LinkedIn:
-- B2B focus, professional audience
-- Ideal for Business Banking campaign
-- Higher CPM, quality over quantity
-
-YouTube:
-- Video storytelling, consideration stage
-- Mid-funnel engagement
-- Moderate CTR (1.1%), good for brand building
-
-TVNZ:
-- TV + OnDemand, older skew
-- Awareness and consideration
-- Premium environment, trust factor
-
-NZ Herald:
-- Display, news context
-- Older audience, trusted publisher
-- Lower CTR (0.30-0.38%), awareness play
-
-**Seasonal Patterns (NZ Banking FY)**
-- Q1 (Apr-Jun, Weeks 1-12): 1.25x - Tax time, KiwiSaver enrollment peak, home buying season
-- Q2 (Jul-Sep, Weeks 13-26): 0.85x - Winter lull, lowest activity period
-- Q3 (Oct-Dec, Weeks 27-39): 1.15x - Year-end push, holiday spending
-- Q4 (Jan-Mar, Weeks 40-52): 0.70-1.10x - Summer lull in Jan, Feb home buying recovery
-
-**Response Structure**
-
-Every response should include:
-
-1. **Executive Overview** (3-4 sentences)
-   - Summarize performance for the latest fiscal period (month/week)
-   - Quantify key shifts in ROAS, CPA, CTR, spend, and revenue
-   - Highlight top-performing campaigns, publishers, and funnel layers
-   - Frame in terms of business impact and efficiency
-
-2. **Performance Insight**
-   - Segment analysis by campaign, publisher, format, funnel, or audience
-   - Use actual numbers and percentages from the data
-   - Compare like-for-like (e.g., Video vs Video, not Video vs Search)
-   - Explain performance drivers from audience psychology perspective
-   - Reference fiscal trends (MoM, WoW, FY-to-date)
-
-3. **Strategic Recommendations** (2-4 actionable tactics)
-   - Provide quantified impact (e.g., "Shift 15% of Home Loans spend from TVNZ to Google Search to improve CPA by $85")
-   - Recommend optimizations across:
-     * Budget allocation between campaigns/channels
-     * Creative format testing
-     * Audience targeting refinement
-     * Timing/seasonality adjustments
-   - Avoid simplistic budget cuts - assess root cause (creative, audience, or channel)
-   - Prioritize changes that improve CPA, ROAS, or conversion volume
-   - Consider audience friction points and barriers to action
-
-**CRITICAL: Investment Scenario Planning**
-
-When asked about investment levels ($100 million, $200 million, $300 million):
-- Current state: $285M baseline performance
-- $100 million scenario: Focus on highest ROAS channels (Google Search, Meta), cut underperformers
-- $200 million scenario: Balanced portfolio, prioritize Conversion campaigns
-- $300 million scenario: Full portfolio with Awareness investment, scale proven channels
-
-Be concise, quantified, and strategic. Always explain the *why* behind performance from the audience perspective. Reference specific campaigns, publishers, and time periods. Speak to portfolio-level performance, not isolated tactics.
-
-**CRITICAL: Never include any chart descriptions, "[Insert Chart]" placeholders, or visualization references. Text analysis only.**
+**CRITICAL: No chart descriptions, visualization references, or placeholder text. Text analysis only. Use NZ spelling.**
 """
 
 # -------------------------------
@@ -297,181 +216,300 @@ if "chat_history" not in st.session_state:
 @st.cache_data(ttl=3600)
 def generate_data():
     fy_year = 2025
-    weeks = list(range(1, 53)) * 20
-
-    publishers = [
-        "Meta", "YouTube", "TikTok", "Search", "Stuff", "NZ Herald", "NZME Radio",
-        "TVNZ OnDemand", "MetService", "Neighbourly", "Spotify", "We Are Frank",
-        "GrabOne", "Go Media", "LUMO", "LinkedIn", "Quantcast", "The Trade Desk",
-        "MediaWorks Radio"
-    ]
+    
+    # Campaign specifications
+    campaigns = {
+        "ANZ Home Loans": {
+            "spend_annual": 80_000_000,
+            "channels": ["TVNZ", "YouTube", "Meta", "Search", "NZ Herald"],
+            "funnel": "Consideration",
+            "demo": ["First Home Buyers (25-34)", "Mortgage Refinancers (35-44)"],
+            "weeks": list(range(1, 27))  # Feb-Jun (weeks 1-26 roughly)
+        },
+        "ANZ Business Banking": {
+            "spend_annual": 65_000_000,
+            "channels": ["LinkedIn", "Search", "NZ Herald", "YouTube"],
+            "funnel": "Consideration",
+            "demo": ["Wealth Builders (45-54)"],
+            "weeks": list(range(1, 53))  # Year-round
+        },
+        "ANZ KiwiSaver": {
+            "spend_annual": 55_000_000,
+            "channels": ["TVNZ", "YouTube", "Meta", "Search", "NZ Herald"],
+            "funnel": "Consideration",
+            "demo": ["First Home Buyers (25-34)", "Mortgage Refinancers (35-44)", "Wealth Builders (45-54)", "Pre-retirees (55+)"],
+            "weeks": list(range(1, 27))  # Feb-Jun
+        },
+        "ANZ Personal Banking": {
+            "spend_annual": 45_000_000,
+            "channels": ["Meta", "Search", "YouTube", "NZ Herald"],
+            "funnel": "Conversion",
+            "demo": ["First Home Buyers (25-34)", "Mortgage Refinancers (35-44)", "Wealth Builders (45-54)"],
+            "weeks": list(range(1, 53))  # Year-round
+        },
+        "ANZ Airpoints Visa": {
+            "spend_annual": 25_000_000,
+            "channels": ["Meta", "Search", "TikTok", "NZ Herald"],
+            "funnel": "Conversion",
+            "demo": ["Young Professionals (25-34)"],
+            "weeks": list(range(35, 41))  # Sep-Oct (weeks 35-40 roughly)
+        },
+        "ANZ goMoney App": {
+            "spend_annual": 15_000_000,
+            "channels": ["Meta", "Search", "TikTok", "YouTube", "TVNZ"],
+            "funnel": "Conversion",
+            "demo": ["Young Professionals (25-34)"],
+            "weeks": list(range(1, 27))  # Apr-Jun (weeks 1-26)
+        }
+    }
+    
     strategies = ["Retargeting", "Brand Lift", "Product Launch", "Offer Promotion"]
-    funnel_layers = ["Awareness", "Consideration", "Conversion"]
     formats = ["Video", "Static", "Carousel", "Interactive", "Radio"]
-    creative_messaging = ["Trust-led", "Incentive-led", "Convenience-led", "Benefit-led"]
-    demo_segments = ["First Home Buyers (25-34)", "Mortgage Refinancers (35-44)", "Wealth Builders (45-54)", "Young Professionals (25-34)", "Pre-retirees (55+)"]
-    behav_segments = ["In-Market Researchers", "Decision-Ready", "Existing Customers"]
-
+    creative_messaging = ["Value-led", "Urgency-led", "Emotional", "Informational"]
+    behav_segments = ["In-Market Researchers", "Decision-Ready", "Loyal Members"]
+    
+    # Publisher-specific ROAS multipliers
+    publisher_roas_adjust = {
+        "Search": 1.4,
+        "Meta": 1.0,
+        "YouTube": 1.05,
+        "TikTok": 0.95,
+        "LinkedIn": 0.9,
+        "TVNZ": 0.85,
+        "NZ Herald": 0.75
+    }
+    
+    # Format-specific ROAS multipliers
+    format_roas_adjust = {
+        "Video": 1.15,
+        "Carousel": 1.20,
+        "Static": 0.85,
+        "Interactive": 1.10,
+        "Radio": 0.75
+    }
+    
+    # Demographic ROAS multipliers
+    demo_roas_adjust = {
+        "First Home Buyers (25-34)": 1.05,
+        "Mortgage Refinancers (35-44)": 1.10,
+        "Wealth Builders (45-54)": 1.15,
+        "Young Professionals (25-34)": 1.08,
+        "Pre-retirees (55+)": 0.95
+    }
+    
+    # Publisher-specific CPA multipliers
+    publisher_cpa_adjust = {
+        "Search": 0.75,
+        "Meta": 1.0,
+        "YouTube": 1.1,
+        "TikTok": 1.05,
+        "LinkedIn": 1.25,
+        "TVNZ": 1.15,
+        "NZ Herald": 1.3
+    }
+    
+    # Format-specific CPA multipliers
+    format_cpa_adjust = {
+        "Video": 0.95,
+        "Carousel": 0.90,
+        "Static": 1.20,
+        "Interactive": 0.98,
+        "Radio": 1.45
+    }
+    
+    # Behavioral segment CPA base
+    cpa_base_lookup = {
+        "In-Market Researchers": 45,
+        "Decision-Ready": 28,
+        "Loyal Members": 18
+    }
+    
+    # CTR by format
+    ctr_lookup = {
+        "Video": 2.8,
+        "Carousel": 3.2,
+        "Static": 1.2,
+        "Interactive": 2.5,
+        "Radio": 0.6
+    }
+    
+    # CPM adjustments
+    cpm_adjust = {
+        "Video": 6,
+        "Carousel": 5,
+        "Static": 4,
+        "Interactive": 6,
+        "Radio": 3
+    }
+    
+    # ROAS base by funnel
+    roas_base_lookup = {
+        "Awareness": 2.0,
+        "Consideration": 3.5,
+        "Conversion": 5.0
+    }
+    
     rows = []
-    for i in range(len(weeks)):
-        week = weeks[i]
-        funnel = funnel_layers[i % 3]
-        format = formats[i % 5]
-        strategy = strategies[i % 4]
-        publisher = publishers[i % len(publishers)]
-        creative = creative_messaging[i % 4]
-        demo = demo_segments[i % 3]
-        behav = behav_segments[i % 3]
-
-        base_spend = {
-            "Awareness": 150_000,
-            "Consideration": 375_000,
-            "Conversion": 750_000
-        }[funnel]
-
-        # Seasonal multipliers (NZ Banking)
-        if 1 <= week <= 12:
-            seasonal_multiplier = 1.25  # Q1: Tax time, KiwiSaver peak, home buying season
-        elif 13 <= week <= 26:
-            seasonal_multiplier = 0.85  # Q2: Winter lull, lowest activity
-        elif 27 <= week <= 39:
-            seasonal_multiplier = 1.15  # Q3: Year-end push, holiday spending
-        else:  # weeks 40-52
-            seasonal_multiplier = 1.05  # Q4: Summer lull in Jan, Feb home buying recovery
+    row_id = 0
+    
+    # Generate data per campaign
+    for campaign_name, campaign_spec in campaigns.items():
+        weekly_spend = campaign_spec["spend_annual"] / len(campaign_spec["weeks"])
         
-        spend = base_spend * seasonal_multiplier
-
-        ctr_lookup = {
-            "Video": 2.8,
-            "Carousel": 3.2,
-            "Static": 1.2,
-            "Interactive": 2.5,
-            "Radio": 0.6
-        }
-        ctr = ctr_lookup[format]
-
-        cpa_lookup = {
-            "High Intent Shoppers": 35,
-            "Cart Abandoners": 28,
-            "Loyalty Members": 22
-        }
-        cpa = cpa_lookup[behav]
-
-        roas_base = {
-            "Awareness": 2.0,
-            "Consideration": 3.5,
-            "Conversion": 5.0
-        }[funnel]
-        roas = max(1.2, roas_base - (spend / 1_000_000))
-
-        cpm_adjust = {
-            "Video": 6,
-            "Carousel": 5,
-            "Static": 4,
-            "Interactive": 6,
-            "Radio": 3
-        }
-        impressions = int(spend / cpm_adjust[format] * 1000)
-        clicks = int(impressions * (ctr / 100))
-        conversions = int(clicks * (0.03 + np.random.rand() * 0.05))  # 3-8% conversion rate
-        revenue = spend * roas
-        
-        # Viewability metrics
-        viewability_rate = round(np.random.uniform(0.55, 0.85), 3)  # 55-85% viewability
-        measurable_impressions = int(impressions * 0.95)  # 95% measurable
-        
-        # Traffic & Engagement Metrics
-        website_sessions = int(clicks * np.random.uniform(0.7, 0.95))
-        time_on_site = round(np.random.uniform(1.5, 8.5), 1)  # minutes
-        pages_per_session = round(np.random.uniform(1.2, 5.5), 2)
-        bounce_rate = round(np.random.uniform(0.25, 0.75), 3)  # 25-75%
-        
-        # Social Engagement (if social channel)
-        if publisher in ["Meta", "TikTok", "LinkedIn"]:
-            social_likes = int(impressions * np.random.uniform(0.001, 0.008))
-            social_shares = int(impressions * np.random.uniform(0.0002, 0.002))
-            social_comments = int(impressions * np.random.uniform(0.0001, 0.001))
-        else:
-            social_likes = 0
-            social_shares = 0
-            social_comments = 0
-        
-        # Digital Revenue breakdown
-        website_sales = int(revenue * 0.45)
-        ecommerce_sales = int(revenue * 0.35)
-        affiliate_revenue = int(revenue * 0.15)
-        other_revenue = int(revenue * 0.05)
-        
-        # CX Metrics
-        form_submissions = int(conversions * 0.6)
-        lead_generation = int(conversions * 0.3)
-        signups = int(conversions * 0.1)
-        
-        # CPA derivatives
-        cost_per_lead = round(spend / max(1, lead_generation), 2) if lead_generation > 0 else spend
-        cost_per_signup = round(spend / max(1, signups), 2) if signups > 0 else spend
-        conversion_rate_pct = round((conversions / max(1, clicks)) * 100, 2)
-
-        if format == "Radio" and publisher in ["NZME Radio", "MediaWorks Radio"]:
-            tarps = round(min(100, 30 + (week % 20)), 1)
-            reach = round(tarps / 1.5, 1)
-            frequency = round(tarps / reach, 1)
-            spot_count = int(spend / 500)
-            station = ["ZM", "The Edge", "Newstalk ZB", "Hauraki", "Coast"][i % 5]
-        else:
-            tarps = None
-            reach = None
-            frequency = None
-            spot_count = None
-            station = None
-
-        rows.append({
-            "FY Year": fy_year,
-            "Week": week,
-            "Publisher": publisher,
-            "Strategy": strategy,
-            "Funnel Layer": funnel,
-            "Format": format,
-            "Creative Messaging": creative,
-            "Audience Segment (Demographic)": demo,
-            "Audience Segment (Behavioral)": behav,
-            "Spend ($)": spend,
-            "ROAS": roas,
-            "CTR (%)": ctr,
-            "CPA ($)": cpa,
-            "Impressions": impressions,
-            "Clicks": clicks,
-            "Conversions": conversions,
-            "Conversion Rate (%)": conversion_rate_pct,
-            "Revenue ($)": revenue,
-            "Website Sales ($)": website_sales,
-            "E-Commerce Sales ($)": ecommerce_sales,
-            "Affiliate Revenue ($)": affiliate_revenue,
-            "Other Revenue ($)": other_revenue,
-            "Form Submissions": form_submissions,
-            "Leads Generated": lead_generation,
-            "Sign-Ups": signups,
-            "Cost Per Lead ($)": cost_per_lead,
-            "Cost Per Sign-Up ($)": cost_per_signup,
-            "Viewability (%)": viewability_rate,
-            "Measurable Impressions": measurable_impressions,
-            "Website Sessions": website_sessions,
-            "Time on Site (min)": time_on_site,
-            "Pages Per Session": pages_per_session,
-            "Bounce Rate (%)": bounce_rate,
-            "Social Likes": social_likes,
-            "Social Shares": social_shares,
-            "Social Comments": social_comments,
-            "TARPs": tarps,
-            "Reach (%)": reach,
-            "Frequency": frequency,
-            "Spot Count": spot_count,
-            "Station": station
-        })
-
+        for week in campaign_spec["weeks"]:
+            # Seasonal multiplier
+            if 1 <= week <= 12:
+                seasonal_mult = 1.25
+            elif 13 <= week <= 26:
+                seasonal_mult = 0.85
+            elif 27 <= week <= 39:
+                seasonal_mult = 1.15
+            else:
+                seasonal_mult = 1.05
+            
+            # Generate 4 rows per week (rotate through channels, formats, audiences)
+            for iteration in range(4):
+                channel = campaign_spec["channels"][iteration % len(campaign_spec["channels"])]
+                format = formats[iteration % len(formats)]
+                strategy = strategies[iteration % len(strategies)]
+                demo = campaign_spec["demo"][iteration % len(campaign_spec["demo"])]
+                behav = behav_segments[iteration % len(behav_segments)]
+                creative = creative_messaging[iteration % len(creative_messaging)]
+                
+                spend = (weekly_spend / 4) * seasonal_mult
+                
+                # Calculate metrics
+                ctr = ctr_lookup[format]
+                pub_mult = publisher_roas_adjust.get(channel, 1.0)
+                fmt_mult = format_roas_adjust.get(format, 1.0)
+                demo_mult = demo_roas_adjust.get(demo, 1.0)
+                roas_base = roas_base_lookup[campaign_spec["funnel"]]
+                roas = max(1.2, (roas_base * pub_mult * fmt_mult * demo_mult) - (spend / 2_000_000))
+                
+                cpa_base = cpa_base_lookup[behav]
+                pub_mult_cpa = publisher_cpa_adjust.get(channel, 1.0)
+                fmt_mult_cpa = format_cpa_adjust.get(format, 1.0)
+                cpa = round(cpa_base * pub_mult_cpa * fmt_mult_cpa, 2)
+                
+                impressions = int(spend / cpm_adjust[format] * 1000)
+                clicks = int(impressions * (ctr / 100))
+                conversions = int(clicks * (0.03 + np.random.rand() * 0.05))
+                revenue = spend * roas
+                
+                # Viewability
+                viewability_rate = round(np.random.uniform(0.55, 0.85), 3)
+                measurable_impressions = int(impressions * 0.95)
+                
+                # Traffic & Engagement
+                website_sessions = int(clicks * np.random.uniform(0.7, 0.95))
+                time_on_site = round(np.random.uniform(1.5, 8.5), 1)
+                pages_per_session = round(np.random.uniform(1.2, 5.5), 2)
+                bounce_rate = round(np.random.uniform(0.25, 0.75), 3)
+                
+                # Social Engagement
+                if channel in ["Meta", "TikTok", "LinkedIn"]:
+                    social_likes = int(impressions * np.random.uniform(0.001, 0.008))
+                    social_shares = int(impressions * np.random.uniform(0.0002, 0.002))
+                    social_comments = int(impressions * np.random.uniform(0.0001, 0.001))
+                else:
+                    social_likes = 0
+                    social_shares = 0
+                    social_comments = 0
+                
+                # Revenue breakdown
+                website_sales = int(revenue * 0.45)
+                ecommerce_sales = int(revenue * 0.35)
+                affiliate_revenue = int(revenue * 0.15)
+                other_revenue = int(revenue * 0.05)
+                
+                # CX Metrics
+                form_submissions = int(conversions * 0.6)
+                lead_generation = int(conversions * 0.3)
+                signups = int(conversions * 0.1)
+                
+                # CPA derivatives
+                cost_per_lead = round(spend / max(1, lead_generation), 2) if lead_generation > 0 else spend
+                cost_per_signup = round(spend / max(1, signups), 2) if signups > 0 else spend
+                conversion_rate_pct = round((conversions / max(1, clicks)) * 100, 2)
+                
+                # Radio specific
+                if format == "Radio" and channel in ["TVNZ", "NZ Herald"]:
+                    tarps = round(min(100, 30 + (week % 20)), 1)
+                    reach = round(tarps / 1.5, 1)
+                    frequency = round(tarps / reach, 1)
+                    spot_count = int(spend / 500)
+                    station = ["ZM", "The Edge", "Newstalk ZB", "Hauraki", "Coast"][row_id % 5]
+                else:
+                    tarps = None
+                    reach = None
+                    frequency = None
+                    spot_count = None
+                    station = None
+                
+                rows.append({
+                    "FY Year": fy_year,
+                    "Week": week,
+                    "Campaign": campaign_name,
+                    "Publisher": channel,
+                    "Strategy": strategy,
+                    "Funnel Layer": campaign_spec["funnel"],
+                    "Format": format,
+                    "Creative Messaging": creative,
+                    "Audience Segment (Demographic)": demo,
+                    "Audience Segment (Behavioral)": behav,
+                    "Spend ($)": spend,
+                    "ROAS": roas,
+                    "CTR (%)": ctr,
+                    "CPA ($)": cpa,
+                    "Impressions": impressions,
+                    "Clicks": clicks,
+                    "Conversions": conversions,
+                    "Conversion Rate (%)": conversion_rate_pct,
+                    "Revenue ($)": revenue,
+                    "Website Sales ($)": website_sales,
+                    "E-Commerce Sales ($)": ecommerce_sales,
+                    "Affiliate Revenue ($)": affiliate_revenue,
+                    "Other Revenue ($)": other_revenue,
+                    "Form Submissions": form_submissions,
+                    "Leads Generated": lead_generation,
+                    "Sign-Ups": signups,
+                    "Cost Per Lead ($)": cost_per_lead,
+                    "Cost Per Sign-Up ($)": cost_per_signup,
+                    "Viewability (%)": viewability_rate,
+                    "Measurable Impressions": measurable_impressions,
+                    "Website Sessions": website_sessions,
+                    "Time on Site (min)": time_on_site,
+                    "Pages Per Session": pages_per_session,
+                    "Bounce Rate (%)": bounce_rate,
+                    "Social Likes": social_likes,
+                    "Social Shares": social_shares,
+                    "Social Comments": social_comments,
+                    "TARPs": tarps,
+                    "Reach (%)": reach,
+                    "Frequency": frequency,
+                    "Spot Count": spot_count,
+                    "Station": station
+                })
+                row_id += 1
+    
     return pd.DataFrame(rows)
 
 df = generate_data()
+
+# Add Channel Type mapping
+def map_channel_type(publisher):
+    if publisher in ['Meta', 'TikTok', 'LinkedIn']:
+        return 'Social'
+    elif publisher in ['NZ Herald', 'TVNZ']:
+        return 'Display'
+    elif publisher == 'Search':
+        return 'Search'
+    elif publisher == 'YouTube':
+        return 'Video'
+    else:
+        return 'Other'
+
+df['Channel'] = df['Publisher'].apply(map_channel_type)
 
 # -------------------------------
 # DYNAMIC CHART GENERATION
@@ -484,7 +522,7 @@ def clean_output(text):
     # Remove <Chart: ...> patterns
     text = re.sub(r'<Chart:.*?>', '', text, flags=re.DOTALL)
     
-    # Clean up broken spacing in numbers/currency 
+    # Clean up broken spacing in numbers/currency (fixes italics issue)
     text = re.sub(r'(\d)([a-z])', r'\1 \2', text)  # "$285million" → "$285 million"
     text = re.sub(r'(\w)\s{2,}(\w)', r'\1 \2', text)  # Multiple spaces → single
     
@@ -499,17 +537,17 @@ def generate_dynamic_chart(user_query, df):
     
     # Channel mix / investment / budget allocation questions
     if any(word in query_lower for word in ['channel mix', 'investment', '$100m', '$200m', '$300m', 'optimal', 'allocation']):
-        data = df.groupby('Publisher').agg({
+        data = df.groupby('Channel').agg({
             'ROAS': 'mean',
             'Spend ($)': 'sum',
             'Revenue ($)': 'sum'
         }).reset_index().sort_values('ROAS', ascending=False).head(10)
         
         chart = alt.Chart(data).mark_bar(color='#8b5cf6').encode(
-            x=alt.X('Publisher:N', sort='-y'),
+            x=alt.X('Channel:N', sort='-y'),
             y=alt.Y('ROAS:Q', title='Average ROAS'),
-            tooltip=['Publisher', alt.Tooltip('ROAS:Q', format='.2f'), alt.Tooltip('Spend ($):Q', format='$,.0f')]
-        ).properties(width=800, height=400, title='Publisher Performance by ROAS').interactive()
+            tooltip=['Channel', alt.Tooltip('ROAS:Q', format='.2f'), alt.Tooltip('Spend ($):Q', format='$,.0f')]
+        ).properties(width=800, height=400, title='Channel Performance by ROAS').interactive()
         
         return chart
     
@@ -528,7 +566,7 @@ def generate_dynamic_chart(user_query, df):
             tooltip=['Format', alt.Tooltip('ROAS:Q', format='.2f'), alt.Tooltip('CPA ($):Q', format='$,.2f')]
         )
         
-        cpa_line = base.mark_line(point=True, color='#ef4444', size=3).encode(
+        cpa_line = base.mark_bar(point=True, color='#ef4444', size=3).encode(
             y=alt.Y('CPA ($):Q', title='CPA ($)', axis=alt.Axis(orient='right')),
             tooltip=['Format', alt.Tooltip('CPA ($):Q', format='$,.2f')]
         )
@@ -553,11 +591,11 @@ def generate_dynamic_chart(user_query, df):
         
         return chart
     
-    # Churn analysis by month
+   # Churn analysis by month
     elif any(word in query_lower for word in ['churn', 'month', 'highest churn', 'internal', 'external', 'driver']):
-        # Group by month (convert week to month approximation)
-        df['Month'] = ((df['Week'] - 1) // 4) + 1
-        data = df.groupby('Month').agg({
+        df_copy = df.copy()
+        df_copy['Month'] = ((df_copy['Week'] - 1) // 4) + 1
+        data = df_copy.groupby('Month').agg({
             'Conversions': 'sum',
             'Spend ($)': 'sum',
             'ROAS': 'mean',
@@ -593,40 +631,40 @@ def generate_dynamic_chart(user_query, df):
         
         return chart
     
-    # Audience segment performance
+# Audience segment performance
     elif any(word in query_lower for word in ['audience', 'segment', 'underperforming', 'demographic', 'behavioral']):
         data = df.groupby('Audience Segment (Demographic)').agg({
             'ROAS': 'mean',
-            'CPA ($)': 'mean',
-            'Conversion Rate (%)': 'mean'
+            'CPA ($)': 'mean'
         }).reset_index()
         
-        roas_chart = alt.Chart(data).mark_line(point=True, color='#00d4ff', size=3).encode(
-            x='Audience Segment (Demographic):N',
+        base = alt.Chart(data).encode(x='Audience Segment (Demographic):N')
+        
+        roas_chart = base.mark_bar(color='#00d4ff').encode(
             y=alt.Y('ROAS:Q', title='ROAS'),
             tooltip=['Audience Segment (Demographic)', alt.Tooltip('ROAS:Q', format='.2f')]
         )
         
-        cpa_chart = alt.Chart(data).mark_line(point=True, color='#ef4444', size=3).encode(
-            x='Audience Segment (Demographic):N',
+        cpa_line = base.mark_line(point=True, color='#ef4444', size=3).encode(
             y=alt.Y('CPA ($):Q', title='CPA ($)', axis=alt.Axis(orient='right')),
             tooltip=['Audience Segment (Demographic)', alt.Tooltip('CPA ($):Q', format='$,.2f')]
         )
         
-        return alt.layer(roas_chart, cpa_chart).resolve_scale(y='independent').properties(
+        return alt.layer(roas_chart, cpa_line).resolve_scale(y='independent').properties(
             width=800, height=400, title='Audience Segment Performance'
         ).interactive()
     
-    # Social vs Display ROAS drivers
+# Social vs Display ROAS drivers
     elif any(word in query_lower for word in ['social', 'display', 'roas', 'driving']):
         social_publishers = ['Meta', 'TikTok', 'LinkedIn']
-        display_publishers = ['Stuff', 'NZ Herald', 'TVNZ OnDemand', 'MetService']
+        display_publishers = ['NZ Herald', 'TVNZ']
         
-        df['Channel Type'] = df['Publisher'].apply(
+        df_copy = df.copy()
+        df_copy['Channel Type'] = df_copy['Publisher'].apply(
             lambda x: 'Social' if x in social_publishers else ('Display' if x in display_publishers else 'Other')
         )
         
-        data = df[df['Channel Type'].isin(['Social', 'Display'])].groupby('Channel Type').agg({
+        data = df_copy[df_copy['Channel Type'].isin(['Social', 'Display'])].groupby('Channel Type').agg({
             'ROAS': 'mean',
             'CTR (%)': 'mean',
             'Conversion Rate (%)': 'mean',
@@ -643,26 +681,17 @@ def generate_dynamic_chart(user_query, df):
     
     # Default fallback
     else:
-        data = df.groupby('Publisher').agg({
-            'ROAS': 'mean',
-            'CPA ($)': 'mean'
+        data = df.groupby('Channel').agg({
+            'ROAS': 'mean'
         }).reset_index().sort_values('ROAS', ascending=False).head(10)
         
-        roas_chart = alt.Chart(data).mark_line(point=True, color='#00d4ff', size=3).encode(
-            x=alt.X('Publisher:N', sort='-y'),
-            y=alt.Y('ROAS:Q', title='ROAS'),
-            tooltip=['Publisher', alt.Tooltip('ROAS:Q', format='.2f')]
-        )
+        chart = alt.Chart(data).mark_bar(color='#00d4ff').encode(
+            x=alt.X('Channel:N', sort='-y'),
+            y=alt.Y('ROAS:Q', title='Average ROAS'),
+            tooltip=['Channel', alt.Tooltip('ROAS:Q', format='.2f')]
+        ).properties(width=800, height=400, title='Channel Performance by ROAS').interactive()
         
-        cpa_chart = alt.Chart(data).mark_line(point=True, color='#ef4444', size=3).encode(
-            x='Publisher:N',
-            y=alt.Y('CPA ($):Q', title='CPA ($)', axis=alt.Axis(orient='right')),
-            tooltip=['Publisher', alt.Tooltip('CPA ($):Q', format='$,.0f')]
-        )
-        
-        return alt.layer(roas_chart, cpa_chart).resolve_scale(y='independent').properties(
-            width=800, height=400, title='Publisher Performance Overview'
-        ).interactive()
+        return chart
 
 # -------------------------------
 # MAIN LAYOUT
@@ -673,7 +702,7 @@ col_title, col_share = st.columns([6, 1])
 with col_title:
     st.title("")
 with col_share:
-    current_url = "https://dentsu-analytics.streamlit.app"  # Update with your actual deployed URL
+    current_url = "https://dentsusolutions.com/"  # Update with your actual deployed URL
     if st.button("🔗 Share", use_container_width=True):
         st.code(current_url, language=None)
         st.success("Link ready to share!")
@@ -703,7 +732,7 @@ if not st.session_state.chat_started:
     st.markdown("### 💡 Quick Questions")
     preset_questions = [
         "💰 Recommend optimal channel mixes for $100M, $200M, and $300M investment levels.",
-        "📊 Determine which formats delivered the highest ROI and CPA.",
+        "📊 Determine which formats delivered the highest ROI.",
         "🎯 Evaluate channels & publishers with the strongest click-to-conversion rates.",
         "📉 Highlight months with the highest churn and distinguish internal vs. external drivers.",
         "🎥 Is Video or Static driving higher engagement?",
@@ -727,7 +756,7 @@ else:
         st.subheader("💡 Quick Questions")
         preset_questions = [
             "💰 Recommend optimal channel mixes for $100M, $200M, and $300M investment levels.",
-            "📊 Determine which formats delivered the highest ROI and CPA.",
+            "📊 Determine which formats delivered the highest ROI.",
             "🎯 Evaluate channels & publishers with the strongest click-to-conversion rates.",
             "📉 Highlight months with the highest churn and distinguish internal vs. external drivers.",
             "🎥 Is Video or Static driving higher engagement?",
