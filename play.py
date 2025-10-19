@@ -468,15 +468,23 @@ df = generate_data()
 # DYNAMIC CHART GENERATION
 # -------------------------------
 def clean_output(text):
-    """Remove all chart placeholder text from AI output"""
+    """Remove formatting artifacts and chart placeholders from AI output"""
     import re
+    
     # Remove [Insert Chart X: ...] patterns
     text = re.sub(r'\[Insert Chart \d+:.*?\]', '', text, flags=re.DOTALL)
     # Remove <Chart: ...> patterns
     text = re.sub(r'<Chart:.*?>', '', text, flags=re.DOTALL)
+    
+    # FIX: Clean up broken spacing in numbers/currency (the main issue)
+    # Handles: "$285million" → "$285 million", "million investment" spacing
+    text = re.sub(r'(\d)([a-z])', r'\1 \2', text)  # "$285million" → "$285 million"
+    text = re.sub(r'(\w)\s{2,}(\w)', r'\1 \2', text)  # Multiple spaces → single space
+    
     # Remove any lingering chart references
     lines = text.split('\n')
     cleaned_lines = [line for line in lines if not line.strip().startswith('<Chart') and not line.strip().startswith('[Insert Chart')]
+    
     return '\n'.join(cleaned_lines).strip()
 
 def generate_dynamic_chart(user_query, df):
