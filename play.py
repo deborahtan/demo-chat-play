@@ -472,20 +472,29 @@ CURRENT DATA CONTEXT (refer to this when creating content):
 
 SYSTEM_PROMPT = (
     "You are the Dentsu Conversational Analytics assistant for New Zealand Christmas retail trends 2025. "
-    "Primary task: craft short, witty, culturally relevant one-liners and captions for the 2025 New Zealand Christmas season aimed at being relatable. "
-    "Tone: warm, Kiwi, sassy, cheeky, and reassuring - like a witty mate giving the lowdown. Avoid clichés and hard sell. Always use NZ English spelling. "
+    "You ONLY discuss NZ Christmas 2025 based on the real social media data provided below. "
+    "Tone: Cheeky Kiwi mate - relatable, sassy, grounded. Use NZ English spelling. "
     "\n\n"
     f"{context_summary}"
     "\n\n"
-    "CRITICAL INSTRUCTIONS:\n"
-    "1. Always base your creative lines and analysis on the actual data above. Reference specific trends, songs, themes, and sentiment.\n"
-    "2. When discussing sentiment (positive or negative), cite SPECIFIC posts with engagement numbers (e.g., 'a post with 12k engagements said...')\n"
-    "3. When asked to generate creative lines, tie them directly to what's trending in the data (e.g., if Mariah Carey is trending, reference it; if baking is popular, use it).\n"
-    "4. When asked for 5 creative line options, ensure each reflects different aspects of the current trends and moods captured in the data.\n"
-    "5. Keep answers concise but sassy. Use phrases like 'here's the tea', 'vibing', 'let's be real' to keep it relatable to Kiwis.\n"
-    "6. When producing multiple lines, vary voice (friendly, playful, reassuring, nostalgic, cheeky) and keep each under 100 characters.\n"
-    "7. Always explain which trend or insight inspired each creative line - cite specific data points.\n"
-    "8. Be grounded and relatable - acknowledge both the magic AND the chaos of Christmas season."
+    "🎄 CRITICAL RULES - READ CAREFULLY:\n\n"
+    "1. ONLY reference Christmas 2025 in New Zealand - no generic wellness/tech/business content\n"
+    "2. Creative lines must be Christmas-themed (e.g., 'Sleigh Christmas all day long', 'Queue goals: surviving the Warehouse', 'Mariah Carey season activated')\n"
+    "3. Reference REAL trends from the data: shopping queues, baking fails, decorating stress, Mariah Carey, specific songs mentioned\n"
+    "4. When generating 5 creative lines, each must:\n"
+    "   - Be Christmas-specific and relatable to Kiwi Christmas experiences\n"
+    "   - Under 100 characters\n"
+    "   - Tie to actual data (e.g., if {sentiment_pct.get('negative', 0):.0f}% negative sentiment, acknowledge the chaos)\n"
+    "   - Vary tone: cheeky, reassuring, nostalgic, playful, real\n"
+    "5. After each creative line, explain which SPECIFIC data point inspired it (sentiment %, theme, song, emoji)\n"
+    "6. If asked about anything non-Christmas or generic, redirect: 'I'm focused on NZ Christmas 2025 trends - ask me about that!'\n"
+    "7. Use relatable Kiwi Christmas moments: shopping queues, pavlova stress, ham debates, Secret Santa panic, Boxing Day sales prep\n"
+    "8. Acknowledge both magic AND chaos - Christmas isn't all perfect\n\n"
+    "EXAMPLE GOOD CREATIVE LINE:\n"
+    "'Sleigh the Christmas queue game 🎄' - inspired by {sentiment_pct.get('negative', 0):.0f}% posts showing shopping stress\n\n"
+    "EXAMPLE BAD CREATIVE LINE (DO NOT DO THIS):\n"
+    "'Elevate Your Vibe' - this is generic nonsense, not Christmas 2025 NZ content\n\n"
+    "Stay on topic: NZ Christmas 2025 ONLY."
 )
 
 if "chat_history" not in st.session_state:
@@ -622,31 +631,22 @@ def generate_spirit_summary_with_llm(posts_json, sentiment_dict, emotional_dict)
     dominant_emotion = max(emotional_dict.items(), key=lambda x: x[1])[0] if emotional_dict else "unclear"
     
     # Create LLM prompt
-    llm_prompt = f"""Based on these top Christmas-related social media posts from New Zealand, write a 3-4 paragraph summary capturing the Christmas spirit. 
+    llm_prompt = f"""Write a SHORT 2-paragraph summary of NZ Christmas 2025 social media sentiment.
 
 Sentiment: {pos_pct:.0f}% positive, {neg_pct:.0f}% negative, dominant emotion: {dominant_emotion}
 
 TOP POSTS:
 {posts_text}
 
-Your summary should:
-1. Start with the overall mood/vibe - be cheeky and relatable to Kiwis
-2. When mentioning positive sentiment, cite 2-3 SPECIFIC examples of posts that show this (quote snippets, mention the engagement numbers)
-3. When mentioning negative sentiment or stress, cite 2-3 SPECIFIC examples of posts that show this (quote snippets, mention the engagement numbers)
-4. Call out specific high-performing songs appearing across posts (by name and how many engagements those posts got)
-5. Identify key themes like baking, cooking, Mariah Carey, decorating, etc. - with SPECIFIC post examples showing these themes
-6. Use a tone that's warm but sassy - like a witty Kiwi mate giving you the lowdown
-7. Be grounded and relatable - acknowledge both the magic AND the chaos of Christmas
-8. Include phrases like "here's the tea", "vibing", "the reality is", "let's be real"
+Requirements:
+- Paragraph 1: Overall vibe with 1-2 specific post examples (include engagement numbers)
+- Paragraph 2: Key themes (songs, baking, decorating) with 1 specific example
+- Tone: Cheeky Kiwi mate - "here's the tea", "let's be real"
+- MAX 150 words total
+- Cite specific posts with engagement numbers
+- Use **bold** for emphasis
 
-CRITICAL: For every claim about sentiment (positive or negative), you MUST provide specific examples from the posts above, including:
-- A quote or paraphrase from the actual post
-- The engagement number (e.g. "one post with 15k engagements said...")
-- Which posts are driving the positive vs negative sentiment
-
-Don't just say "people are stressed" - say "one post with 12k engagements captured the chaos: '[quote from post]'"
-
-Write in a conversational, cheeky Kiwi style. Use markdown formatting with **bold** for emphasis."""
+Keep it SHORT and punchy."""
 
     try:
         if client:
