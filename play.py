@@ -536,24 +536,40 @@ with c3:
 # Emotion Summary (expandable) - UPDATED with top emojis
 # ------------------------------
 with st.expander("🔥 Emotion Summary (expand)"):
-    # Create bar chart data
-    emotion_df = pd.DataFrame([
-        {"Emotion": k.capitalize(), "Count": v, "Percentage": round(v / total_posts * 100, 1)}
+    # Create sentiment bar chart data
+    sentiment_df = pd.DataFrame([
+        {"Sentiment": k.capitalize(), "Count": v, "Percentage": round(v / total_posts * 100, 1)}
         for k, v in sentiment_counts.items()
     ])
     
-    # Display bar chart
-    fig = px.bar(emotion_df, x="Emotion", y="Count", 
+    st.markdown("**Sentiment Breakdown:**")
+    # Display sentiment bar chart
+    fig_sentiment = px.bar(sentiment_df, x="Sentiment", y="Count", 
                  hover_data=["Percentage"],
                  labels={"Count": "Number of Posts", "Percentage": "Percentage (%)"},
-                 color="Emotion",
+                 color="Sentiment",
                  color_discrete_map={"Positive": "#4CAF50", "Negative": "#F44336", "Neutral": "#9E9E9E", "Unclear": "#607D8B"})
-    fig.update_layout(showlegend=False, height=300)
-    st.plotly_chart(fig, use_container_width=True)
+    fig_sentiment.update_layout(showlegend=False, height=300)
+    st.plotly_chart(fig_sentiment, use_container_width=True)
+    
+    # Create emotional barometer bar chart
+    emotion_df = pd.DataFrame([
+        {"Emotion": k.capitalize(), "Count": v}
+        for k, v in emotional_barometer.items()
+    ])
+    
+    st.markdown("**Emotional Barometer:**")
+    # Display emotional barometer bar chart
+    fig_emotion = px.bar(emotion_df, x="Emotion", y="Count",
+                 labels={"Count": "Number of Posts"},
+                 color="Emotion",
+                 color_discrete_sequence=px.colors.qualitative.Set3)
+    fig_emotion.update_layout(showlegend=False, height=300)
+    st.plotly_chart(fig_emotion, use_container_width=True)
     
     # Top emojis - sleek display
     if top_emojis:
-        st.markdown("**Top emojis:**")
+        st.markdown("**Top Emojis:**")
         emoji_cols = st.columns(len(top_emojis))
         for idx, (emoji, count) in enumerate(top_emojis):
             with emoji_cols[idx]:
@@ -567,16 +583,13 @@ with st.expander("🔥 Emotion Summary (expand)"):
                     """,
                     unsafe_allow_html=True
                 )
-    
-    st.markdown("**Emotional barometer (counts):**")
-    for e, c in emotional_barometer.items():
-        st.markdown(f"- {e.capitalize()}: {c}")
 
 # ------------------------------
 # Smart Christmas Spirit Summary - UPDATED to use LLM
 # ------------------------------
 st.subheader("🎄 Christmas Spirit Summary")
 
+@st.cache_data(show_spinner=False)
 def generate_spirit_summary_with_llm(posts, sentiment_counts, emotional_barometer):
     # Filter Christmas-related posts
     christmas_posts = [p for p in posts if "christmas" in safe_text(p.get("text", "")).lower()]
@@ -637,8 +650,12 @@ Write in a conversational, engaging style. Use markdown formatting with **bold**
         st.warning(f"Could not generate LLM summary: {e}")
         return f"**Overall vibe:** {pos_pct:.0f}% positive, {neg_pct:.0f}% negative, with **{dominant_emotion}** leading the charge.\n\nDetailed analysis unavailable."
 
+# Convert dicts to tuples for hashability in caching
+sentiment_tuple = tuple(sorted(sentiment_counts.items()))
+emotional_tuple = tuple(sorted(emotional_barometer.items()))
+
 with st.spinner("Generating Christmas spirit summary..."):
-    spirit_summary = generate_spirit_summary_with_llm(top_posts_data, sentiment_counts, emotional_barometer)
+    spirit_summary = generate_spirit_summary_with_llm(tuple(top_posts_data), sentiment_tuple, emotional_tuple)
     st.markdown(spirit_summary)
 
 # ------------------------------
@@ -864,49 +881,62 @@ if user_input:
                     def format_response(text):
                         # Check if response contains numbered list (1. 2. 3. etc)
                         lines = text.split('\n')
-                        formatted_lines = []
+                        formatted_parts = []
+                        current_text = []
                         in_numbered_list = False
-                        list_items = []
                         
-                        for line in lines:
+                        i = 0
+                        while i < len(lines):
+                            line = lines[i]
+                            stripped = line.strip()
+                            
                             # Check if line starts with a number followed by period or parenthesis
-                            if re.match(r'^\d+[\.)]\s+', line.strip()):
+                            if re.match(r'^\d+[\.)]\s+', stripped):
+                                # If we have accumulated text before the list, add it
+                                if current_text:
+                                    formatted_parts.append('\n'.join(current_text))
+                                    current_text = []
+                                
                                 in_numbered_list = True
                                 # Extract the number and content
-                                match = re.match(r'^(\d+)[\.)]\s+(.+)$', line.strip())
+                                match = re.match(r'^(\d+)[\.)]\s+(.+)$', stripped)
                                 if match:
                                     num, content = match.groups()
-                                    list_items.append((num, content))
-                            elif in_numbered_list and line.strip() == '':
-                                # Empty line might indicate end of list
-                                continue
-                            elif in_numbered_list and not re.match(r'^\d+[\.)]\s+', line.strip()):
-                                # List ended, render collected items
-                                if list_items:
-                                    for num, content in list_items:
-                                        formatted_lines.append(
-                                            f"""<div style='padding: 12px 16px; margin: 8px 0; border-left: 3px solid #4CAF50; background-color: #1E1E1E; border-radius: 4px;'>
-                                            <span style='font-weight: 700; color: #4CAF50; font-size: 18px; margin-right: 12px;'>{num}.</span>
-                                            <span style='font-size: 14px;'>{content}</span>
-                                            </div>"""
-                                        )
-                                    list_items = []
-                                    in_numbered_list = False
-                                formatted_lines.append(line)
-                            else:
-                                formatted_lines.append(line)
+                                    
+                                    # Check if next lines are continuation (don't start with number)
+                                    full_content = content
+                                    j = i + 1
+                                    while j < len(lines):
+                                        next_line = lines[j].strip()
+                                        if next_line and not re.match(r'^\d+[\.)]\s+', next_line):
+                                            full_content += ' ' + next_line
+                                            j += 1
+                                        else:
+                                            break
+                                    
+                                    # Create styled block for this numbered item
+                                    formatted_parts.append(
+                                        f"""<div style='padding: 12px 16px; margin: 8px 0; border-left: 3px solid #4CAF50; background-color: #1E1E1E; border-radius: 4px;'>
+                                        <span style='font-weight: 700; color: #4CAF50; font-size: 18px; margin-right: 12px;'>{num}.</span>
+                                        <span style='font-size: 14px;'>{full_content}</span>
+                                        </div>"""
+                                    )
+                                    i = j
+                                    continue
+                            elif in_numbered_list and not stripped:
+                                # Empty line after list - end of list
+                                in_numbered_list = False
+                            elif not in_numbered_list:
+                                # Regular text, accumulate it
+                                current_text.append(line)
+                            
+                            i += 1
                         
-                        # Handle case where list is at the end
-                        if list_items:
-                            for num, content in list_items:
-                                formatted_lines.append(
-                                    f"""<div style='padding: 12px 16px; margin: 8px 0; border-left: 3px solid #4CAF50; background-color: #1E1E1E; border-radius: 4px;'>
-                                    <span style='font-weight: 700; color: #4CAF50; font-size: 18px; margin-right: 12px;'>{num}.</span>
-                                    <span style='font-size: 14px;'>{content}</span>
-                                    </div>"""
-                                )
+                        # Add any remaining text
+                        if current_text:
+                            formatted_parts.append('\n'.join(current_text))
                         
-                        return '\n'.join(formatted_lines)
+                        return '\n'.join(formatted_parts)
                     
                     # Check if response has numbered list
                     if re.search(r'^\d+[\.)]\s+', cleaned_output, re.MULTILINE):
