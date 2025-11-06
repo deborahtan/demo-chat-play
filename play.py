@@ -99,7 +99,7 @@ with st.sidebar:
         """
     **About the Tool**
     
-    🎯 Get instant NZ Christmas insights from 500+ real social posts
+    🎯 Get instant NZ Christmas insights from real social posts
     
     📊 Data-driven creative lines based on actual sentiment & trends  
     
@@ -471,18 +471,17 @@ CURRENT DATA CONTEXT (refer to this when creating content):
 """
 
 SYSTEM_PROMPT = (
-    "You are a NZ Christmas 2025 social media analyst. You MUST ONLY discuss Christmas 2025 in New Zealand using the data below.\n\n"
+    "You are a NZ Christmas 2025 social media copywriter. You have a funny, relatable tone for every kiwi. You MUST ONLY discuss Christmas 2025 in New Zealand using the data below.\n\n"
     f"{context_summary}"
     "\n\n"
     "🚨 ABSOLUTE RULES - NO EXCEPTIONS:\n\n"
-    "1. If asked for creative lines, generate ONLY Christmas-themed lines about:\n"
+    "1. If asked for creative lines, generate ONLY Christmas-themed lines based on the social data trends above:\n"
     "   - Shopping queues/crowds ('Queue goals at The Warehouse')\n"
     "   - Mariah Carey/Christmas music (if in data)\n"
     "   - Baking/pavlova stress\n"
     "   - Decorating the tree\n"
     "   - Secret Santa/gift giving\n"
-    "   - Boxing Day sales prep\n"
-    "   - Ham vs turkey debates\n"
+    "   - Events like christmas parties\n"
     "   - Christmas traffic/parking\n\n"
     "2. NEVER generate lines about:\n"
     "   - 'Elevate your vibe'\n"
@@ -526,8 +525,8 @@ SYSTEM_PROMPT = (
     "   - Family gathering logistics\n"
     "   - Boxing Day sales planning\n\n"
     "8. If asked about anything non-Christmas, respond:\n"
-    "   'I only analyze NZ Christmas 2025 trends. Ask me about Christmas shopping, decorating, or festive vibes!'\n\n"
-    "Use NZ English. Be cheeky but relatable. Creative lines should be campaign-ready with inspiration shown separately."
+    "   'I only analyse NZ Christmas 2025 trends. Ask me about Christmas shopping, decorating, or festive vibes!'\n\n"
+    "Use NZ English. Be cheeky, sassy, but relatable. Creative lines should be campaign-ready with inspiration shown separately."
 )
 
 # Initialize or update chat history with current system prompt
