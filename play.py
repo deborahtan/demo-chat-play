@@ -1,49 +1,59 @@
+# app.py
 import os
+import io
+import math
 import streamlit as st
 import pandas as pd
-from datetime import datetime, timedelta
-import numpy as np
-import altair as alt
+import matplotlib.pyplot as plt
+from wordcloud import WordCloud
 from groq import Groq
+import requests
+import re
+from collections import Counter
+from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
+from datetime import datetime
+from functools import lru_cache
+import plotly.express as px
 
-# -------------------------------
-# CONFIG
-# -------------------------------
+# ------------------------------
+# Styling (Dentsu)
+# ------------------------------
 st.set_page_config(
-    page_title="Dentsu Conversational Analytics",
+    page_title="Dentsu Conversational Analytics: Trendspotter",
     page_icon="https://img.icons8.com/ios11/16/000000/dashboard-gauge.png",
     layout="wide"
 )
 
-# Hide Streamlit branding and menu
-st.markdown("""
+st.markdown(
+    """
     <style>
+    @font-face {
+        font-family: 'StabilGrotesk';
+        src: url('app/static/StabilGrotesk-Regular.otf') format('opentype');
+        font-weight: 400;
+        font-style: normal;
+    }
+    @font-face {
+        font-family: 'StabilGrotesk';
+        src: url('app/static/StabilGrotesk-Bold.otf') format('opentype');
+        font-weight: 700;
+        font-style: normal;
+    }
+    
+    html, body, [class*="css"] {
+        font-family: 'StabilGrotesk', sans-serif !important;
+    }
+    
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     .stDeployButton {visibility: hidden;}
-    </style>
-""", unsafe_allow_html=True)
 
-# -------------------------------
-# STYLING
-# -------------------------------
-st.markdown("""
-<style>
-    .stSidebar {
-        min-width: 336px;
-    }
-    .stSidebar .stHeading {
-        color: #FAFAFA;
-    }
-    .stSidebar .stElementContainer {
-        width: auto;
-    }
-    .stAppHeader {
-        display: none;
-    }
-    .stMainBlockContainer div[data-testid="stVerticalBlock"] > div[data-testid="stElementContainer"] > div[data-testid="stButton"] {
-        text-align: center;
-    }
+    .stSidebar { min-width: 336px; }
+    .stSidebar .stHeading { color: #FAFAFA; }
+    .stSidebar .stElementContainer { width: auto; }
+    .stAppHeader { display: none; }
+
+    .stMainBlockContainer div[data-testid="stVerticalBlock"] > div[data-testid="stElementContainer"] > div[data-testid="stButton"] { text-align: center; }
     .stMainBlockContainer div[data-testid="stVerticalBlock"] > div[data-testid="stElementContainer"] > div[data-testid="stButton"] button {
         color: #FAFAFA;
         border: 1px solid #FAFAFA33;
@@ -54,770 +64,723 @@ st.markdown("""
     .stMainBlockContainer div[data-testid="stVerticalBlock"] > div[data-testid="stElementContainer"] > div[data-testid="stButton"] button:hover {
         transform: translateY(-2px);
     }
-</style>
-""", unsafe_allow_html=True)
 
-# -------------------------------
-# SIDEBAR
-# -------------------------------
+    .big-num { font-size: 40px; font-weight:700; margin-bottom:2px; text-align:center; }
+    .small-label { font-size:12px; color:#666; text-align:center; margin-top:0; }
+    .scorecard-block { padding:8px 4px; }
+    .scorecard-emoji { font-size:14px; text-align:center; }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+# ------------------------------
+# Sidebar header logo and controls
+# ------------------------------
 with st.sidebar:
     st.image("https://www.dentsu.com/assets/images/main-logo-alt.png", width=160)
-
-    # Clear conversation button
     if st.button("🧹 Start New Chat", use_container_width=True):
         st.session_state.chat_history = []
+        st.session_state.question_history = []
         st.rerun()
-
-    st.header("Dentsu Conversational Analytics")
-    st.markdown("""
+    st.header("Dentsu Conversational Analytics: Trendspotter")
+    st.markdown(
+        """
     **How to use**
-    - Type any question about campaign performance or strategy.
-    - The assistant responds with quantified, data-driven insight.
-    - Conversation context is remembered.
-    """)
-    
+    - Synthesises top posts across TikTok, Instagram and Meta and analyses sentiment
+    - Conversation context is remembered
+    """
+    )
     st.divider()
-    
-    # Question history section
     st.subheader("📋 Recent Questions")
-    
     if "question_history" not in st.session_state:
         st.session_state.question_history = []
-    
     today = datetime.now().date()
-    yesterday = today - timedelta(days=1)
-    
-    today_questions = [q for q in st.session_state.question_history if q["date"] == today]
-    yesterday_questions = [q for q in st.session_state.question_history if q["date"] == yesterday]
-    
-    if today_questions:
+    yesterday = today - pd.Timedelta(days=1)
+    today_qs = [q for q in st.session_state.question_history if q["date"] == today]
+    yesterday_qs = [q for q in st.session_state.question_history if q["date"] == yesterday]
+    if today_qs:
         st.markdown("**Today**")
-        for q in reversed(today_questions[-5:]):  # Show last 5
-            if st.button(q["text"][:50] + "..." if len(q["text"]) > 50 else q["text"], 
-                        key=f"today_{q['timestamp']}",
-                        use_container_width=True):
+        for q in reversed(today_qs[-5:]):
+            if st.button(q["text"][:50] + ("..." if len(q["text"]) > 50 else ""), key=f"today_{q['timestamp']}", use_container_width=True):
                 st.session_state.rerun_question = q["text"]
                 st.rerun()
-    
-    if yesterday_questions:
+    if yesterday_qs:
         st.markdown("**Yesterday**")
-        for q in reversed(yesterday_questions[-5:]):  # Show last 5
-            if st.button(q["text"][:50] + "..." if len(q["text"]) > 50 else q["text"], 
-                        key=f"yesterday_{q['timestamp']}",
-                        use_container_width=True):
+        for q in reversed(yesterday_qs[-5:]):
+            if st.button(q["text"][:50] + ("..." if len(q["text"]) > 50 else ""), key=f"yesterday_{q['timestamp']}", use_container_width=True):
                 st.session_state.rerun_question = q["text"]
                 st.rerun()
 
-# -------------------------------
-# HEADER
-# -------------------------------
-st.markdown("""
-<div>
-    <h1 style="text-align: center; font-size: 64px;">
-        <span style="color: #FAFAFA; text-shadow: 0 0 4px rgba(216, 237, 255, 0.16), 0 2px 20px rgba(164, 214, 255, 0.36);">dentsu</span>
-        <span style="background: radial-gradient(909.23% 218.25% at -4.5% 144.64%, #80D5FF 0%, #79AAFA 44.5%, #C4ADFF 100%); background-clip: text; -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Conversational Analytics</span>
-    </h1>
-</div>
-""", unsafe_allow_html=True)
+# ------------------------------
+# Config / Clients
+# ------------------------------
+CSV_EXPORT_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTH33TC1xTixH8TWGAOUUe3o-UIFX82HMaBv8BlI4KA5UnJxYs50QBitDUwXB_Jkl8M52CdE66s_XDx/pub?output=csv"
 
-# -------------------------------
-# GROQ SETUP
-# -------------------------------
-api_key = os.getenv("GROQ_API_KEY")
-if not api_key:
-    st.error("Missing GROQ_API_KEY. Add it to your environment or Streamlit secrets.")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "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")
+GROQ_MODEL = "llama-3.1-8b-instant"
+client = None
+if GROQ_API_KEY:
+    try:
+        client = Groq(api_key=GROQ_API_KEY)
+    except Exception:
+        client = None
+
+HF_EMOTION_MODEL = os.getenv("HF_EMOTION_MODEL", "j-hartmann/emotion-english-distilroberta-base")
+EMOTION_MODEL_MAX = int(os.getenv("EMOTION_MODEL_MAX", "200"))
+
+# ------------------------------
+# Helpers
+# ------------------------------
+def safe_text(s):
+    if s is None:
+        return ""
+    try:
+        if isinstance(s, float) and math.isnan(s):
+            return ""
+    except Exception:
+        pass
+    if not isinstance(s, str):
+        try:
+            s = str(s)
+        except Exception:
+            return ""
+    return s.strip()
+
+
+def safe_int(v):
+    try:
+        return int(float(v or 0))
+    except Exception:
+        return 0
+
+
+def fmt_k(n):
+    try:
+        n = int(n)
+    except Exception:
+        return "0"
+    if n >= 1_000_000:
+        v = n / 1_000_000
+        return f"{v:.1f}M".rstrip("0").rstrip(".")
+    if n >= 1_000:
+        v = n / 1_000
+        return f"{v:.1f}k".rstrip("0").rstrip(".")
+    return str(n)
+
+
+def nice_date(iso):
+    s = safe_text(iso)
+    if not s:
+        return ""
+    for fmt in ("%Y-%m-%dT%H:%M:%S.%fZ", "%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%d"):
+        try:
+            dt = datetime.strptime(s, fmt)
+            return dt.strftime("%Y-%m-%d")
+        except Exception:
+            continue
+    return s.split("T")[0] if "T" in s else s
+
+
+def extract_hashtags(text):
+    text = safe_text(text)
+    return re.findall(r"#\w+", text.lower())
+
+
+def top_n_emojis(texts, n=3):
+    emoji_pattern = re.compile("[\U0001F300-\U0001F6FF\U0001F900-\U0001F9FF\U00002600-\U000027BF]+", flags=re.UNICODE)
+    counter = Counter()
+    for t in texts:
+        t = safe_text(t)
+        for em in emoji_pattern.findall(t):
+            counter[em] += 1
+    return counter.most_common(n)
+
+
+# ------------------------------
+# Fetch CSV
+# ------------------------------
+def fetch_sheet_as_records(csv_url, timeout=30):
+    try:
+        resp = requests.get(csv_url, timeout=timeout)
+        resp.raise_for_status()
+        buf = io.BytesIO(resp.content)
+        df = pd.read_csv(buf, dtype=str)
+        return df.to_dict(orient="records"), "TikTok, Instagram, Meta"
+    except Exception as e:
+        st.error(f"Failed to fetch/parse CSV: {e}")
+        return None, None
+
+
+# ------------------------------
+# Normalize row (include URL)
+# ------------------------------
+def normalize_item(item):
+    if not isinstance(item, dict):
+        return {}
+
+    def g(k):
+        if k in item and pd.notna(item[k]):
+            return item[k]
+        return None
+
+    url = g("webVideoUrl") or g("videoUrl") or g("url") or g("link") or ""
+
+    return {
+        "id": g("id") or "",
+        "user": g("user") or "",
+        "text": g("text") or "",
+        "likes": safe_int(g("diggCount") or g("likeCount") or g("likes") or 0),
+        "shares": safe_int(g("shareCount") or g("shares") or 0),
+        "plays": safe_int(g("playCount") or g("plays") or g("views") or 0),
+        "comments": safe_int(g("commentCount") or g("comments") or 0),
+        "music": g("musicMeta.musicName") or "",
+        "music_author": g("musicMeta.musicAuthor") or "",
+        "created": g("createTimeISO") or g("created_at") or g("post_date") or "",
+        "url": safe_text(url),
+    }
+
+# ------------------------------
+# Emotion model (cached small)
+# ------------------------------
+try:
+    from transformers import pipeline
+except Exception:
+    pipeline = None
+
+
+@lru_cache(maxsize=1)
+def get_emotion_pipeline(model_name=HF_EMOTION_MODEL, device=-1):
+    if pipeline is None:
+        return None
+    try:
+        return pipeline("text-classification", model=model_name, return_all_scores=True, device=device)
+    except Exception:
+        return None
+
+
+def analyze_text_heuristic(text):
+    text = safe_text(text)
+    if not text:
+        return {"emotion": "unclear", "sentiment": "unclear", "confidence": 0.0}
+    if re.search(r"\b(win|love|happy|joy|great|awesome|yay|yes|delight|best|cheer)\b", text, re.I):
+        return {"emotion": "happy", "sentiment": "positive", "confidence": 0.65}
+    if re.search(r"\b(annoy|panic|stress|forgot|hate|angry|sad|oops|frustrat|upset)\b", text, re.I):
+        return {"emotion": "angry", "sentiment": "negative", "confidence": 0.65}
+    if re.search(r"\b(memory|remember|nostalgia|nostalgic|back then|old times)\b", text, re.I):
+        return {"emotion": "nostalgic", "sentiment": "neutral", "confidence": 0.7}
+    if re.search(r"\b(give|donate|gift|generous|share|help)\b", text, re.I):
+        return {"emotion": "generous", "sentiment": "positive", "confidence": 0.7}
+    if re.search(r"\b(fun|lol|haha|hilarious|silly)\b", text, re.I):
+        return {"emotion": "fun", "sentiment": "positive", "confidence": 0.6}
+    return {"emotion": "unclear", "sentiment": "unclear", "confidence": 0.5}
+
+
+def analyze_text_with_model(text, model_pipeline=None, min_confidence=0.55):
+    text = safe_text(text)
+    if not text:
+        return {"emotion": "unclear", "sentiment": "unclear", "confidence": 0.0}
+    if model_pipeline is None:
+        model_pipeline = get_emotion_pipeline()
+    if model_pipeline:
+        try:
+            preds = model_pipeline(text[:1000])
+            if isinstance(preds, list) and preds:
+                scores = preds[0]
+                top = max(scores, key=lambda x: x["score"])
+                label = top["label"].lower()
+                conf = float(top["score"])
+                map_em = {
+                    "joy": "happy",
+                    "happiness": "happy",
+                    "love": "generous",
+                    "sadness": "sad",
+                    "anger": "angry",
+                    "fear": "fear",
+                    "surprise": "surprise",
+                    "neutral": "neutral",
+                }
+                emotion = map_em.get(label, label)
+                if conf < min_confidence:
+                    return {"emotion": "unclear", "sentiment": "unclear", "confidence": conf}
+                sentiment = "positive" if emotion in ("happy", "generous", "surprise") else ("negative" if emotion in ("sad", "angry", "fear") else "neutral")
+                return {"emotion": emotion, "sentiment": sentiment, "confidence": conf}
+        except Exception:
+            pass
+    return analyze_text_heuristic(text)
+
+
+# ------------------------------
+# Process records
+# ------------------------------
+@st.cache_data(show_spinner=False)
+def process_records(records, use_model=True, max_items=500):
+    hashtag_counter = Counter()
+    keyword_counter = Counter()
+    sentiment_counts = Counter()
+    emotional_barometer = Counter()
+    posts = []
+    model_pipeline = get_emotion_pipeline() if use_model else None
+
+    for i, raw in enumerate((records or [])[:max_items]):
+        r = normalize_item(raw if isinstance(raw, dict) else {})
+        txt = safe_text(r.get("text"))
+        if use_model and model_pipeline and i < EMOTION_MODEL_MAX:
+            analysis = analyze_text_with_model(txt, model_pipeline=model_pipeline, min_confidence=0.55)
+        else:
+            analysis = analyze_text_heuristic(txt)
+        emotion = analysis.get("emotion", "unclear")
+        sentiment = analysis.get("sentiment", "unclear")
+        sentiment_counts[sentiment] += 1
+        emotional_barometer[emotion] += 1
+        tags = [t.lstrip("#") for t in extract_hashtags(txt)]
+        hashtag_counter.update(tags)
+        words = re.findall(r"\b[a-zA-Z]{3,}\b", txt.lower())
+        keywords = [w for w in words if w not in ENGLISH_STOP_WORDS]
+        keyword_counter.update(keywords)
+        posts.append(
+            {
+                "id": r.get("id", ""),
+                "user": r.get("user", ""),
+                "text": txt,
+                "sentiment": sentiment,
+                "emotion": emotion,
+                "likes": r.get("likes", 0),
+                "shares": r.get("shares", 0),
+                "plays": r.get("plays", 0),
+                "comments": r.get("comments", 0),
+                "music": r.get("music", ""),
+                "music_author": r.get("music_author", ""),
+                "created": r.get("created", ""),
+                "url": r.get("url", ""),
+            }
+        )
+    top_keywords = [k for k, _ in keyword_counter.most_common(10)]
+    return dict(hashtag_counter), dict(sentiment_counts), dict(emotional_barometer), top_keywords, posts
+
+
+# ------------------------------
+# Utility: clean_output
+# ------------------------------
+def clean_output(text):
+    if not isinstance(text, str):
+        return ""
+    text = re.sub(r"\[Insert Chart \d+:.*?\]", "", text, flags=re.DOTALL)
+    text = re.sub(r"<Chart:.*?>", "", text, flags=re.DOTALL)
+    text = re.sub(r"(\d)([a-zA-Z])", r"\1 \2", text)
+    text = re.sub(r"\s{2,}", " ", text)
+    lines = [ln for ln in text.splitlines() if not ln.strip().startswith("<Chart") and not ln.strip().startswith("[Insert Chart")]
+    return "\n".join(lines).strip()
+
+# ------------------------------
+# Load data and process
+# ------------------------------
+records, source_label = fetch_sheet_as_records(CSV_EXPORT_URL)
+if not records:
     st.stop()
 
-client = Groq(api_key=api_key)
+hashtag_counter, sentiment_counts, emotional_barometer, top_keywords, top_posts_data = process_records(records, use_model=True, max_items=500)
 
-# -------------------------------
-# SYSTEM PROMPT
-# -------------------------------
-system_prompt = """
-You are the ANZ Conversational Analytics tool — a senior strategist delivering enterprise-level marketing intelligence to C-suite stakeholders.Your role is to synthesize performance across all channels, formats, funnel layers, and audience segments and deliver quantified, executive-ready insights that reflect fiscal year context and strategic impact.
-Use new zealand spelling and context. 
-**CRITICAL: You have access to real data. Do NOT invent hypothetical data.**
-- The dataframe `df` contains actual campaign performance across all 6 campaigns, 7 publishers, and 52 weeks
-- Every claim MUST reference real metrics from this data
-- If asked about something the data doesn't contain, say "Data insufficient" — do NOT generate hypothetical examples
+# derive summaries
+total_posts = sum(sentiment_counts.values()) or 1
+sentiment_pct = {k: round(v / total_posts * 100, 1) for k, v in sentiment_counts.items()}
+texts = [p.get("text", "") for p in top_posts_data]
+top_emojis = top_n_emojis(texts, n=3)
 
-**Current Dataset Context**
-- FY2025: April 2024 - March 2025 (Week 1 = Early April, Week 52 = Late March)
-- Total Annual Investment: $300-500 million across 6 campaigns
-- Publishers: Meta, Google, YouTube, TikTok, LinkedIn, TVNZ, NZ Herald
-- 7 Publishers, 6 Campaigns, 52 Weeks, 3 Funnel Layers, 4 Formats
+for p in top_posts_data:
+    p["eng"] = int(p.get("likes", 0)) + int(p.get("shares", 0)) + int(p.get("comments", 0))
+top_posts_sorted = sorted(top_posts_data, key=lambda x: x.get("eng", 0), reverse=True)
+top_3_posts = top_posts_sorted[:3]
 
-Always reference specific campaigns. If the query doesn't specify campaigns, pick 2-3 relevant examples.
+# Top themes calculation
+def top_themes_from_posts(posts, top_n=6):
+    tokens = []
+    for p in posts:
+        text = safe_text(p.get("text",""))
+        tokens += re.findall(r"\b[a-zA-Z]{4,}\b", text.lower())
+    tokens = [t for t in tokens if t not in ENGLISH_STOP_WORDS]
+    c = Counter(tokens)
+    return [t for t, _ in c.most_common(top_n)]
 
-**6 Campaigns & Objectives:**
-1. Home Loans ($80M, Weeks 1-26, 25-44): Drive consideration + enquiries. Channels: TVNZ, YouTube, Meta, Search, NZ Herald. Funnel: Consideration. Barrier: complexity of mortgage process + upfront costs.
-2. Business Banking ($65M, Year-round, 35-54): Acquire SME customers. Channels: LinkedIn, Search, NZ Herald, YouTube. Funnel: Consideration. Barrier: skepticism about fintech; need proof of track record.
-3. KiwiSaver ($55M, Weeks 1-26, 18-54): Drive enrollments during tax season. Channels: TVNZ, YouTube, Meta, Search, NZ Herald. Funnel: Consideration. Barrier: financial literacy + tax confusion.
-4. Personal Banking ($45M, Year-round, 25-54): Drive account switching. Channels: Meta, Search, YouTube, NZ Herald. Funnel: Conversion. Barrier: loyalty to existing bank + perception of switching friction.
-5. Airpoints Visa ($25M, Weeks 35-40, 18-35): Acquire younger customers post-Kiwibank switch. Channels: Meta, Search, TikTok, NZ Herald. Funnel: Conversion. Barrier: rewards comparison across products; emotional attachment to Kiwibank brand.
-6. goMoney App ($15M, Weeks 1-26, 18-44): Drive downloads + activation. Channels: Meta, Search, TikTok, YouTube, TVNZ. Funnel: Conversion. Barrier: digital literacy + willingness to switch from incumbent banking app.
+top_themes = top_themes_from_posts(top_posts_data, top_n=6)
 
-**Audience Demographics & Decision Drivers:**
-- 25-34 (First Home Buyers): Value digital convenience + clarity. Decision driver: desire to own home; motivated by life stage. Respond to: comparative information, trust signals, urgency (first-time opportunity).
-- 35-44 (Mortgage Refinancers): Established, higher income, value trust. Decision driver: potential savings. Respond to: premium environments (TVNZ), authority voices, detailed comparisons.
-- 45-54 (Wealth Builders/SME Owners): Peak earning, investment-focused, skeptical of fintech. Decision driver: ROI + control. Respond to: professional channels (LinkedIn), data-driven proof, track record.
-- 18-35 (Young Professionals/Digital-First): Mobile-first, social proof-driven. Decision driver: rewards + convenience. Respond to: peer recommendations, authentic content, instant gratification (TikTok, Meta).
+# Calculate Christmas mentions
+mentions_total = sum(len(re.findall(r"\bchristmas\b", safe_text(t), flags=re.I)) for t in texts)
 
-**Publisher ROAS Multipliers:** Search 1.4x, Meta 1.0x, YouTube 1.05x, TikTok 0.95x, LinkedIn 0.9x, TVNZ 0.85x, NZ Herald 0.75x
-**Format ROAS Multipliers:** Carousel 1.2x, Video 1.15x, Interactive 1.1x, Static 0.85x, Radio 0.75x
-**Demographic ROAS Multipliers:** Wealth Builders 1.15x, Mortgage Refinancers 1.1x, Young Professionals 1.08x, First Home Buyers 1.05x, Pre-retirees 0.95x
+# Get top songs from posts
+music_counter = Counter()
+for p in top_posts_data:
+    if p.get("music"):
+        music_counter[p.get("music")] += 1
+top_songs = [song for song, _ in music_counter.most_common(5)]
 
-**Seasonality:** Q1 (Weeks 1-12) 1.25x [Tax time, KiwiSaver peak, home buying], Q2 (13-26) 0.85x [Winter lull], Q3 (27-39) 1.15x [Year-end push], Q4 (40-52) 1.05x [Summer lull recovery]
-
-**Response Format:**
-
-1. **Executive Summary** (1-2 sentences)
-   - State specific finding + campaign(s) + business impact
-   - Example: "Home Loans underleverage Search by 60% despite 1.4x ROAS multiplier—$3.2M recoverable margin in Q1 because first-home buyers actively compare mortgage rates on Search."
-
-2. **Performance Insight** (3-4 paragraphs)
-   - Use template: "[Campaign] underperforms [Publisher] because [audience barrier]. [Demographic] needs [format/channel] because [psychological driver]. Data shows [metric] = [value], indicating [root cause]."
-   - Example: "Home Loans underperforms TVNZ relative to Search because first-home buyers in Consideration actively compare rates (intent signal), not seeking upper-funnel awareness. However, Mortgage Refinancers (35-44) need TVNZ's premium environment because they require trust-building for $500K+ decisions; Search's transactional tone doesn't build confidence for existing-customer retention."
-   - Compare like-for-like only (Video vs Video, Consideration vs Consideration)
-   - Always explain the causal chain, not just the metric
-
-3. **Recommendations** (2-3 bullets with full structure)
-   - Format: a) Campaign(s), b) Change, c) Why (barrier + fit), d) Impact (quantified), e) Trade-off
-   - Example: "Home Loans → Shift 15% TVNZ spend ($2.1M) to Search Carousel in Q1 (weeks 1-12). Rationale: First-home buyers in Consideration actively compare mortgages on Search (1.4x ROAS baseline vs TVNZ 0.85x); Carousel format drives 1.2x additional lift by showing 4 loan product angles. Impact: CPA improves $31→$24 (22% efficiency), ROAS +0.4x. Preserve $6.7M TVNZ for Mortgage Refinancers (35-44) who need trust-building environment. Result: Home Loans portfolio ROAS moves 3.2→3.6."
-
-**If query doesn't specify campaigns:**
-Pick 2-3 relevant ones. Example: "Home Loans and Business Banking both sit in Consideration. Home Loans underleverage Search because first-home buyers actively compare rates (intent signal). Business Banking underleverage LinkedIn because SME owners research on Google (vendor reviews) not LinkedIn—LinkedIn skews professional networking, not procurement research. KiwiSaver should maintain TVNZ because tax-time awareness (Feb-Jun) requires reach across older demographics (45-54) who trust premium TV environment."
-
-**Investment Scenario Planning:**
-- Current: $285M baseline
-- $100M: Cut awareness. Focus Conversion (Personal Banking, Airpoints, goMoney) on Search + Meta. Home Loans → Search + YouTube only. Business Banking → Search only. Remove TVNZ, Herald, LinkedIn. Expected ROAS: 3.8-4.2 (portfolio squeeze, reach collapse).
-- $200M: Split Consideration/Conversion. Home Loans + KiwiSaver → Search + Meta (Q1 seasonality). Business Banking → Search + YouTube (year-round). Airpoints + goMoney → Meta + TikTok (high-ROI Conversion). Cut TVNZ, reduce LinkedIn. Expected ROAS: 3.4-3.6.
-- $300M: Full portfolio with Awareness. Scale Home Loans + KiwiSaver across all channels (TVNZ + Herald for reach). LinkedIn for Business Banking (SME targeting). Airpoints + goMoney → full channel mix. Expected ROAS: 2.8-3.2 (reach dilution, lower average ROAS but volume trade-off).
-
-**BAN THESE PHRASES:**
-- "enables/enable precise tracking," "cost efficiency," "dynamic testing," "unique capabilities"
-- "drives engagement" (unless: "drives engagement because Carousel shows 4 angles, reducing decision friction")
-- "Comparative analysis shows," "highlights the importance," "it's important to note"
-- "Performance variance across channels" (state specific variance + why)
-- "Amplify high-performing channels," "Optimize targeting" (vague, non-causal)
-
-**CRITICAL: No chart descriptions, visualization references, or placeholder text. Text analysis only. Use NZ spelling.**
+# ------------------------------
+# UPDATED System Prompt with Context
+# ------------------------------
+context_summary = f"""
+CURRENT DATA CONTEXT (refer to this when creating content):
+- Total posts analyzed: {total_posts}
+- Christmas mentions: {mentions_total}
+- Sentiment breakdown: {sentiment_pct.get('positive', 0):.0f}% positive, {sentiment_pct.get('negative', 0):.0f}% negative, {sentiment_pct.get('neutral', 0):.0f}% neutral
+- Top emojis: {', '.join([e for e, _ in top_emojis[:3]])}
+- Top songs trending: {', '.join(top_songs[:3]) if top_songs else 'None'}
+- Key themes: {', '.join(top_themes[:5])}
+- Dominant emotion: {max(emotional_barometer.items(), key=lambda x: x[1])[0] if emotional_barometer else 'unclear'}
 """
 
-# -------------------------------
-# CHAT MEMORY
-# -------------------------------
+SYSTEM_PROMPT = (
+    "You are the Dentsu Conversational Analytics assistant for New Zealand Christmas retail trends 2025. "
+    "Primary task: craft short, witty, culturally relevant one-liners and captions for the 2025 New Zealand Christmas season aimed at being relatable. "
+    "Tone: warm, Kiwi, reassuring, lightly cheeky; avoid clichés and hard sell. Always use NZ English spelling. "
+    "\n\n"
+    f"{context_summary}"
+    "\n\n"
+    "CRITICAL: Always base your creative lines and analysis on the actual data above. Reference specific trends, songs, themes, and sentiment. "
+    "When asked to generate creative lines, tie them directly to what's trending in the data (e.g., if Mariah Carey is trending, reference it; if baking is popular, use it). "
+    "When asked for 5 creative line options, ensure each reflects different aspects of the current trends and moods captured in the data. "
+    "Keep answers concise. When producing multiple lines, vary voice (friendly, playful, reassuring, nostalgic) and keep each under 100 characters. "
+    "Always explain which trend or insight inspired each creative line."
+)
+
 if "chat_history" not in st.session_state:
-    st.session_state.chat_history = [{"role": "system", "content": system_prompt}]
+    st.session_state.chat_history = [{"role": "system", "content": SYSTEM_PROMPT}]
 
-# -------------------------------
-# SAMPLE DATA
-# -------------------------------
-@st.cache_data(ttl=3600)
-def generate_data():
-    fy_year = 2025
-    
-    # Campaign specifications
-    campaigns = {
-        "ANZ Home Loans": {
-            "spend_annual": 80_000_000,
-            "channels": ["TVNZ", "YouTube", "Meta", "Search", "NZ Herald"],
-            "funnel": "Consideration",
-            "demo": ["First Home Buyers (25-34)", "Mortgage Refinancers (35-44)"],
-            "weeks": list(range(1, 27))  # Feb-Jun (weeks 1-26 roughly)
-        },
-        "ANZ Business Banking": {
-            "spend_annual": 65_000_000,
-            "channels": ["LinkedIn", "Search", "NZ Herald", "YouTube"],
-            "funnel": "Consideration",
-            "demo": ["Wealth Builders (45-54)"],
-            "weeks": list(range(1, 53))  # Year-round
-        },
-        "ANZ KiwiSaver": {
-            "spend_annual": 55_000_000,
-            "channels": ["TVNZ", "YouTube", "Meta", "Search", "NZ Herald"],
-            "funnel": "Consideration",
-            "demo": ["First Home Buyers (25-34)", "Mortgage Refinancers (35-44)", "Wealth Builders (45-54)", "Pre-retirees (55+)"],
-            "weeks": list(range(1, 27))  # Feb-Jun
-        },
-        "ANZ Personal Banking": {
-            "spend_annual": 45_000_000,
-            "channels": ["Meta", "Search", "YouTube", "NZ Herald"],
-            "funnel": "Conversion",
-            "demo": ["First Home Buyers (25-34)", "Mortgage Refinancers (35-44)", "Wealth Builders (45-54)"],
-            "weeks": list(range(1, 53))  # Year-round
-        },
-        "ANZ Airpoints Visa": {
-            "spend_annual": 25_000_000,
-            "channels": ["Meta", "Search", "TikTok", "NZ Herald"],
-            "funnel": "Conversion",
-            "demo": ["Young Professionals (25-34)"],
-            "weeks": list(range(35, 41))  # Sep-Oct (weeks 35-40 roughly)
-        },
-        "ANZ goMoney App": {
-            "spend_annual": 15_000_000,
-            "channels": ["Meta", "Search", "TikTok", "YouTube", "TVNZ"],
-            "funnel": "Conversion",
-            "demo": ["Young Professionals (25-34)"],
-            "weeks": list(range(1, 27))  # Apr-Jun (weeks 1-26)
-        }
-    }
-    
-    strategies = ["Retargeting", "Brand Lift", "Product Launch", "Offer Promotion"]
-    formats = ["Video", "Static", "Carousel", "Interactive", "Radio"]
-    creative_messaging = ["Value-led", "Urgency-led", "Emotional", "Informational"]
-    behav_segments = ["In-Market Researchers", "Decision-Ready", "Loyal Members"]
-    
-    # Publisher-specific ROAS multipliers
-    publisher_roas_adjust = {
-        "Search": 1.4,
-        "Meta": 1.0,
-        "YouTube": 1.05,
-        "TikTok": 0.95,
-        "LinkedIn": 0.9,
-        "TVNZ": 0.85,
-        "NZ Herald": 0.75
-    }
-    
-    # Format-specific ROAS multipliers
-    format_roas_adjust = {
-        "Video": 1.15,
-        "Carousel": 1.20,
-        "Static": 0.85,
-        "Interactive": 1.10,
-        "Radio": 0.75
-    }
-    
-    # Demographic ROAS multipliers
-    demo_roas_adjust = {
-        "First Home Buyers (25-34)": 1.05,
-        "Mortgage Refinancers (35-44)": 1.10,
-        "Wealth Builders (45-54)": 1.15,
-        "Young Professionals (25-34)": 1.08,
-        "Pre-retirees (55+)": 0.95
-    }
-    
-    # Publisher-specific CPA multipliers
-    publisher_cpa_adjust = {
-        "Search": 0.75,
-        "Meta": 1.0,
-        "YouTube": 1.1,
-        "TikTok": 1.05,
-        "LinkedIn": 1.25,
-        "TVNZ": 1.15,
-        "NZ Herald": 1.3
-    }
-    
-    # Format-specific CPA multipliers
-    format_cpa_adjust = {
-        "Video": 0.95,
-        "Carousel": 0.90,
-        "Static": 1.20,
-        "Interactive": 0.98,
-        "Radio": 1.45
-    }
-    
-    # Behavioral segment CPA base
-    cpa_base_lookup = {
-        "In-Market Researchers": 45,
-        "Decision-Ready": 28,
-        "Loyal Members": 18
-    }
-    
-    # CTR by format
-    ctr_lookup = {
-        "Video": 2.8,
-        "Carousel": 3.2,
-        "Static": 1.2,
-        "Interactive": 2.5,
-        "Radio": 0.6
-    }
-    
-    # CPM adjustments
-    cpm_adjust = {
-        "Video": 6,
-        "Carousel": 5,
-        "Static": 4,
-        "Interactive": 6,
-        "Radio": 3
-    }
-    
-    # ROAS base by funnel
-    roas_base_lookup = {
-        "Awareness": 2.0,
-        "Consideration": 3.5,
-        "Conversion": 5.0
-    }
-    
-    rows = []
-    row_id = 0
-    
-    # Generate data per campaign
-    for campaign_name, campaign_spec in campaigns.items():
-        weekly_spend = campaign_spec["spend_annual"] / len(campaign_spec["weeks"])
-        
-        for week in campaign_spec["weeks"]:
-            # Seasonal multiplier
-            if 1 <= week <= 12:
-                seasonal_mult = 1.25
-            elif 13 <= week <= 26:
-                seasonal_mult = 0.85
-            elif 27 <= week <= 39:
-                seasonal_mult = 1.15
-            else:
-                seasonal_mult = 1.05
-            
-            # Generate 4 rows per week (rotate through channels, formats, audiences)
-            for iteration in range(4):
-                channel = campaign_spec["channels"][iteration % len(campaign_spec["channels"])]
-                format = formats[iteration % len(formats)]
-                strategy = strategies[iteration % len(strategies)]
-                demo = campaign_spec["demo"][iteration % len(campaign_spec["demo"])]
-                behav = behav_segments[iteration % len(behav_segments)]
-                creative = creative_messaging[iteration % len(creative_messaging)]
-                
-                spend = (weekly_spend / 4) * seasonal_mult
-                
-                # Calculate metrics
-                ctr = ctr_lookup[format]
-                pub_mult = publisher_roas_adjust.get(channel, 1.0)
-                fmt_mult = format_roas_adjust.get(format, 1.0)
-                demo_mult = demo_roas_adjust.get(demo, 1.0)
-                roas_base = roas_base_lookup[campaign_spec["funnel"]]
-                roas = max(1.2, (roas_base * pub_mult * fmt_mult * demo_mult) - (spend / 2_000_000))
-                
-                cpa_base = cpa_base_lookup[behav]
-                pub_mult_cpa = publisher_cpa_adjust.get(channel, 1.0)
-                fmt_mult_cpa = format_cpa_adjust.get(format, 1.0)
-                cpa = round(cpa_base * pub_mult_cpa * fmt_mult_cpa, 2)
-                
-                impressions = int(spend / cpm_adjust[format] * 1000)
-                clicks = int(impressions * (ctr / 100))
-                conversions = int(clicks * (0.03 + np.random.rand() * 0.05))
-                revenue = spend * roas
-                
-                # Viewability
-                viewability_rate = round(np.random.uniform(0.55, 0.85), 3)
-                measurable_impressions = int(impressions * 0.95)
-                
-                # Traffic & Engagement
-                website_sessions = int(clicks * np.random.uniform(0.7, 0.95))
-                time_on_site = round(np.random.uniform(1.5, 8.5), 1)
-                pages_per_session = round(np.random.uniform(1.2, 5.5), 2)
-                bounce_rate = round(np.random.uniform(0.25, 0.75), 3)
-                
-                # Social Engagement
-                if channel in ["Meta", "TikTok", "LinkedIn"]:
-                    social_likes = int(impressions * np.random.uniform(0.001, 0.008))
-                    social_shares = int(impressions * np.random.uniform(0.0002, 0.002))
-                    social_comments = int(impressions * np.random.uniform(0.0001, 0.001))
-                else:
-                    social_likes = 0
-                    social_shares = 0
-                    social_comments = 0
-                
-                # Revenue breakdown
-                website_sales = int(revenue * 0.45)
-                ecommerce_sales = int(revenue * 0.35)
-                affiliate_revenue = int(revenue * 0.15)
-                other_revenue = int(revenue * 0.05)
-                
-                # CX Metrics
-                form_submissions = int(conversions * 0.6)
-                lead_generation = int(conversions * 0.3)
-                signups = int(conversions * 0.1)
-                
-                # CPA derivatives
-                cost_per_lead = round(spend / max(1, lead_generation), 2) if lead_generation > 0 else spend
-                cost_per_signup = round(spend / max(1, signups), 2) if signups > 0 else spend
-                conversion_rate_pct = round((conversions / max(1, clicks)) * 100, 2)
-                
-                # Radio specific
-                if format == "Radio" and channel in ["TVNZ", "NZ Herald"]:
-                    tarps = round(min(100, 30 + (week % 20)), 1)
-                    reach = round(tarps / 1.5, 1)
-                    frequency = round(tarps / reach, 1)
-                    spot_count = int(spend / 500)
-                    station = ["ZM", "The Edge", "Newstalk ZB", "Hauraki", "Coast"][row_id % 5]
-                else:
-                    tarps = None
-                    reach = None
-                    frequency = None
-                    spot_count = None
-                    station = None
-                
-                rows.append({
-                    "FY Year": fy_year,
-                    "Week": week,
-                    "Campaign": campaign_name,
-                    "Publisher": channel,
-                    "Strategy": strategy,
-                    "Funnel Layer": campaign_spec["funnel"],
-                    "Format": format,
-                    "Creative Messaging": creative,
-                    "Audience Segment (Demographic)": demo,
-                    "Audience Segment (Behavioral)": behav,
-                    "Spend ($)": spend,
-                    "ROAS": roas,
-                    "CTR (%)": ctr,
-                    "CPA ($)": cpa,
-                    "Impressions": impressions,
-                    "Clicks": clicks,
-                    "Conversions": conversions,
-                    "Conversion Rate (%)": conversion_rate_pct,
-                    "Revenue ($)": revenue,
-                    "Website Sales ($)": website_sales,
-                    "E-Commerce Sales ($)": ecommerce_sales,
-                    "Affiliate Revenue ($)": affiliate_revenue,
-                    "Other Revenue ($)": other_revenue,
-                    "Form Submissions": form_submissions,
-                    "Leads Generated": lead_generation,
-                    "Sign-Ups": signups,
-                    "Cost Per Lead ($)": cost_per_lead,
-                    "Cost Per Sign-Up ($)": cost_per_signup,
-                    "Viewability (%)": viewability_rate,
-                    "Measurable Impressions": measurable_impressions,
-                    "Website Sessions": website_sessions,
-                    "Time on Site (min)": time_on_site,
-                    "Pages Per Session": pages_per_session,
-                    "Bounce Rate (%)": bounce_rate,
-                    "Social Likes": social_likes,
-                    "Social Shares": social_shares,
-                    "Social Comments": social_comments,
-                    "TARPs": tarps,
-                    "Reach (%)": reach,
-                    "Frequency": frequency,
-                    "Spot Count": spot_count,
-                    "Station": station
-                })
-                row_id += 1
-    
-    return pd.DataFrame(rows)
+# Title + source
+st.markdown("## 🎄 NZ Christmas Retail Trendspotter")
+st.markdown("**Source:** TikTok, Instagram, Meta")
 
-df = generate_data()
+# ------------------------------
+# Key Christmas Mentions Heading + Scorecards
+# ------------------------------
+st.markdown("### 🎅 Key Christmas Mentions")
 
-# Add Channel Type mapping
-def map_channel_type(publisher):
-    if publisher in ['Meta', 'TikTok', 'LinkedIn']:
-        return 'Social'
-    elif publisher in ['NZ Herald', 'TVNZ']:
-        return 'Display'
-    elif publisher == 'Search':
-        return 'Search'
-    elif publisher == 'YouTube':
-        return 'Video'
+top3_emoji_list = top_emojis
+
+# Scorecards layout
+c1, c2, c3 = st.columns(3)
+with c1:
+    st.markdown(
+        """
+        <div style='text-align:center; padding:20px; border:1px solid #333; border-radius:8px;'>
+            <div style='font-size:14px; color:#888; margin-bottom:8px;'>Total posts</div>
+            <div style='font-size:36px; font-weight:700;'>{}</div>
+        </div>
+        """.format(total_posts),
+        unsafe_allow_html=True,
+    )
+with c2:
+    st.markdown(
+        """
+        <div style='text-align:center; padding:20px; border:1px solid #333; border-radius:8px;'>
+            <div style='font-size:14px; color:#888; margin-bottom:8px;'>Christmas mentions</div>
+            <div style='font-size:36px; font-weight:700;'>{}</div>
+        </div>
+        """.format(mentions_total),
+        unsafe_allow_html=True,
+    )
+with c3:
+    emoji_count = sum([c for _, c in top3_emoji_list]) if top3_emoji_list else 0
+    st.markdown(
+        """
+        <div style='text-align:center; padding:20px; border:1px solid #333; border-radius:8px;'>
+            <div style='font-size:14px; color:#888; margin-bottom:8px;'>Christmas emoji mentions</div>
+            <div style='font-size:36px; font-weight:700;'>{}</div>
+        </div>
+        """.format(emoji_count),
+        unsafe_allow_html=True,
+    )
+
+# ------------------------------
+# Emotion Summary (expandable) - UPDATED with top emojis
+# ------------------------------
+with st.expander("🔥 Emotion Summary (expand)"):
+    # Create bar chart data
+    emotion_df = pd.DataFrame([
+        {"Emotion": k.capitalize(), "Count": v, "Percentage": round(v / total_posts * 100, 1)}
+        for k, v in sentiment_counts.items()
+    ])
+    
+    # Display bar chart
+    fig = px.bar(emotion_df, x="Emotion", y="Count", 
+                 hover_data=["Percentage"],
+                 labels={"Count": "Number of Posts", "Percentage": "Percentage (%)"},
+                 color="Emotion",
+                 color_discrete_map={"Positive": "#4CAF50", "Negative": "#F44336", "Neutral": "#9E9E9E", "Unclear": "#607D8B"})
+    fig.update_layout(showlegend=False, height=300)
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # Top emojis - sleek display
+    if top_emojis:
+        st.markdown("**Top emojis:**")
+        emoji_cols = st.columns(len(top_emojis))
+        for idx, (emoji, count) in enumerate(top_emojis):
+            with emoji_cols[idx]:
+                st.markdown(
+                    f"""
+                    <div style='text-align:center; padding:15px; border:1px solid #333; border-radius:8px;'>
+                        <div style='font-size:32px; margin-bottom:8px;'>{emoji}</div>
+                        <div style='font-size:18px; font-weight:700;'>{count}</div>
+                        <div style='font-size:12px; color:#888;'>mentions</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+    
+    st.markdown("**Emotional barometer (counts):**")
+    for e, c in emotional_barometer.items():
+        st.markdown(f"- {e.capitalize()}: {c}")
+
+# ------------------------------
+# Smart Christmas Spirit Summary - UPDATED to use LLM
+# ------------------------------
+st.subheader("🎄 Christmas Spirit Summary")
+
+def generate_spirit_summary_with_llm(posts, sentiment_counts, emotional_barometer):
+    # Filter Christmas-related posts
+    christmas_posts = [p for p in posts if "christmas" in safe_text(p.get("text", "")).lower()]
+    
+    # Get top 30 posts by engagement for LLM analysis
+    top_christmas_posts = sorted(christmas_posts, key=lambda x: x.get("eng", 0), reverse=True)[:30]
+    
+    # Prepare post texts for LLM
+    post_samples = []
+    for i, p in enumerate(top_christmas_posts[:30], 1):
+        text = safe_text(p.get("text", ""))
+        music = safe_text(p.get("music", ""))
+        eng = p.get("eng", 0)
+        post_samples.append(f"Post {i} ({fmt_k(eng)} engagements): {text[:200]}... [Music: {music}]")
+    
+    posts_text = "\n\n".join(post_samples)
+    
+    # Calculate sentiment stats
+    total = sum(sentiment_counts.values()) or 1
+    pos_pct = sentiment_counts.get("positive", 0) / total * 100
+    neg_pct = sentiment_counts.get("negative", 0) / total * 100
+    dominant_emotion = max(emotional_barometer.items(), key=lambda x: x[1])[0] if emotional_barometer else "unclear"
+    
+    # Create LLM prompt
+    llm_prompt = f"""Based on these top Christmas-related social media posts from New Zealand, write a 3-4 paragraph summary capturing the Christmas spirit. 
+
+Sentiment: {pos_pct:.0f}% positive, {neg_pct:.0f}% negative, dominant emotion: {dominant_emotion}
+
+TOP POSTS:
+{posts_text}
+
+Your summary should:
+1. Start with the overall mood/vibe
+2. Call out specific high-performing songs appearing across posts (by name)
+3. Identify key themes like baking, cooking, Mariah Carey, decorating, etc. with specific examples
+4. Share 1-2 direct quotes showing excitement, nostalgia, or holiday hustle
+5. Keep it warm and Kiwi in tone
+6. Be specific and grounded in the actual post content - don't make things up
+
+Write in a conversational, engaging style. Use markdown formatting with **bold** for emphasis."""
+
+    try:
+        if client:
+            # Create a temporary chat for this summary
+            summary_messages = [
+                {"role": "system", "content": "You are a social media analyst specializing in sentiment and trend analysis for New Zealand audiences."},
+                {"role": "user", "content": llm_prompt}
+            ]
+            response = client.chat.completions.create(
+                model=GROQ_MODEL,
+                messages=summary_messages,
+                temperature=0.7
+            )
+            return response.choices[0].message.content
+        else:
+            return f"**Overall vibe:** {pos_pct:.0f}% positive, {neg_pct:.0f}% negative, with **{dominant_emotion}** leading the charge.\n\nUnable to generate detailed summary - LLM client not available."
+    except Exception as e:
+        st.warning(f"Could not generate LLM summary: {e}")
+        return f"**Overall vibe:** {pos_pct:.0f}% positive, {neg_pct:.0f}% negative, with **{dominant_emotion}** leading the charge.\n\nDetailed analysis unavailable."
+
+with st.spinner("Generating Christmas spirit summary..."):
+    spirit_summary = generate_spirit_summary_with_llm(top_posts_data, sentiment_counts, emotional_barometer)
+    st.markdown(spirit_summary)
+
+# ------------------------------
+# Top Posts Summary (expandable with links)
+# ------------------------------
+with st.expander("🎄 Top Posts Summary (expand)"):
+    if top_posts_sorted:
+        for r in top_posts_sorted[:50]:
+            eng = fmt_k(r.get("eng",0))
+            txt = (safe_text(r.get("text",""))[:180] + "...") if len(safe_text(r.get("text",""))) > 180 else safe_text(r.get("text",""))
+            date = nice_date(r.get("created",""))
+            post_url = safe_text(r.get("url",""))
+            st.markdown(f"**{eng}** — {txt}")
+            meta = []
+            if r.get("music"):
+                meta.append(f"Song: {safe_text(r.get('music'))}")
+            if date:
+                meta.append(f"Date: {date}")
+            if post_url:
+                meta.append(f"[Link to post]({post_url})")
+            if meta:
+                st.markdown(" • ".join(meta))
+            st.markdown("---")
     else:
-        return 'Other'
+        st.info("No posts to display")
 
-df['Channel'] = df['Publisher'].apply(map_channel_type)
-
-# -------------------------------
-# DYNAMIC CHART GENERATION
-# -------------------------------
-def clean_output(text):
-    """Remove formatting artifacts and chart placeholders from AI output"""
-    import re
-    # Remove [Insert Chart X: ...] patterns
-    text = re.sub(r'\[Insert Chart \d+:.*?\]', '', text, flags=re.DOTALL)
-    # Remove <Chart: ...> patterns
-    text = re.sub(r'<Chart:.*?>', '', text, flags=re.DOTALL)
+# ------------------------------
+# Wordcloud & Hashtags (expandable) - UPDATED with transparent background
+# ------------------------------
+with st.expander("🌈 Hashtag Cloud (expand)"):
+    # Sort hashtags by count and create options with counts
+    sorted_hashtags = sorted(dict(hashtag_counter).items(), key=lambda x: x[1], reverse=True) if isinstance(hashtag_counter, dict) else []
+    hashtag_options = ["All hashtags"] + [f"#{tag} ({count} posts)" for tag, count in sorted_hashtags]
     
-    # Clean up broken spacing in numbers/currency (fixes italics issue)
-    text = re.sub(r'(\d)([a-z])', r'\1 \2', text)  # "$285million" → "$285 million"
-    text = re.sub(r'(\w)\s{2,}(\w)', r'\1 \2', text)  # Multiple spaces → single
+    sel_tag_display = st.selectbox("Filter cloud by hashtag (optional)", options=hashtag_options)
     
-    # Remove any lingering chart references
-    lines = text.split('\n')
-    cleaned_lines = [line for line in lines if not line.strip().startswith('<Chart') and not line.strip().startswith('[Insert Chart')]
-    return '\n'.join(cleaned_lines).strip()
-
-def generate_dynamic_chart(user_query, df):
-    """Generate a chart based on what the user is asking about"""
-    query_lower = user_query.lower()
+    # Extract just the tag name
+    sel_tag = ""
+    if sel_tag_display and sel_tag_display != "All hashtags":
+        sel_tag = sel_tag_display.split(" (")[0].lstrip("#")
     
-    # Channel mix / investment / budget allocation questions
-    if any(word in query_lower for word in ['channel mix', 'investment', '$100m', '$200m', '$300m', 'optimal', 'allocation']):
-        data = df.groupby('Channel').agg({
-            'ROAS': 'mean',
-            'Spend ($)': 'sum',
-            'Revenue ($)': 'sum'
-        }).reset_index().sort_values('ROAS', ascending=False).head(10)
-        
-        chart = alt.Chart(data).mark_bar(color='#8b5cf6').encode(
-            x=alt.X('Channel:N', sort='-y'),
-            y=alt.Y('ROAS:Q', title='Average ROAS'),
-            tooltip=['Channel', alt.Tooltip('ROAS:Q', format='.2f'), alt.Tooltip('Spend ($):Q', format='$,.0f')]
-        ).properties(width=800, height=400, title='Channel Performance by ROAS').interactive()
-        
-        return chart
-    
-    # ROI and CPA by format
-    elif any(word in query_lower for word in ['roi', 'highest roi', 'cpa', 'format']):
-        data = df.groupby('Format').agg({
-            'ROAS': 'mean',
-            'CPA ($)': 'mean',
-            'Revenue ($)': 'sum'
-        }).reset_index().sort_values('ROAS', ascending=False)
-        
-        base = alt.Chart(data).encode(x='Format:N')
-        
-        roas_chart = base.mark_bar(color='#10b981').encode(
-            y=alt.Y('ROAS:Q', title='Average ROAS'),
-            tooltip=['Format', alt.Tooltip('ROAS:Q', format='.2f'), alt.Tooltip('CPA ($):Q', format='$,.2f')]
-        )
-        
-        cpa_line = base.mark_line(point=True, color='#ef4444', size=3).encode(
-            y=alt.Y('CPA ($):Q', title='CPA ($)', axis=alt.Axis(orient='right')),
-            tooltip=['Format', alt.Tooltip('CPA ($):Q', format='$,.2f')]
-        )
-        
-        return alt.layer(roas_chart, cpa_line).resolve_scale(y='independent').properties(
-            width=800, height=400, title='Format Performance: ROAS vs CPA'
-        ).interactive()
-    
-    # Click-to-conversion rates by channel/publisher
-    elif any(word in query_lower for word in ['click', 'conversion rate', 'click-to-conversion', 'strongest']):
-        data = df.groupby('Channel').agg({
-            'Conversion Rate (%)': 'mean',
-            'CTR (%)': 'mean',
-            'Conversions': 'sum'
-        }).reset_index().sort_values('Conversion Rate (%)', ascending=False).head(10)
-        
-        chart = alt.Chart(data).mark_bar(color='#3b82f6').encode(
-            x=alt.X('Channel:N', sort='-y'),
-            y=alt.Y('Conversion Rate (%):Q', title='Conversion Rate (%)'),
-            tooltip=['Channel', alt.Tooltip('Conversion Rate (%):Q', format='.2f'), alt.Tooltip('CTR (%):Q', format='.2f')]
-        ).properties(width=800, height=400, title='Channels by Conversion Rate').interactive()
-        
-        return chart
-    
-    # Churn analysis by month
-    elif any(word in query_lower for word in ['churn', 'month', 'highest churn', 'internal', 'external', 'driver']):
-        df_copy = df.copy()
-        df_copy['Month'] = ((df_copy['Week'] - 1) // 4) + 1
-        data = df_copy.groupby('Month').agg({
-            'Conversions': 'sum',
-            'Spend ($)': 'sum',
-            'ROAS': 'mean',
-            'CPA ($)': 'mean'
-        }).reset_index()
-        
-        # Calculate churn proxy (inverse of conversions normalized)
-        data['Churn Index'] = 100 - (data['Conversions'] / data['Conversions'].max() * 100)
-        
-        chart = alt.Chart(data).mark_line(point=True, color='#ef4444', size=3).encode(
-            x=alt.X('Month:Q', title='Month'),
-            y=alt.Y('Churn Index:Q', title='Churn Index'),
-            tooltip=['Month', alt.Tooltip('Churn Index:Q', format='.1f'), alt.Tooltip('Conversions:Q', format=',.0f')]
-        ).properties(width=800, height=400, title='Churn Index by Month').interactive()
-        
-        return chart
-    
-    # Video vs Static engagement
-    elif any(word in query_lower for word in ['video', 'static', 'engagement', 'higher engagement']):
-        data = df[df['Format'].isin(['Video', 'Static'])].groupby('Format').agg({
-            'CTR (%)': 'mean',
-            'Time on Site (min)': 'mean',
-            'Pages Per Session': 'mean',
-            'Social Likes': 'sum',
-            'Social Shares': 'sum'
-        }).reset_index()
-        
-        chart = alt.Chart(data).mark_bar(color='#06b6d4').encode(
-            x='Format:N',
-            y=alt.Y('CTR (%):Q', title='Average CTR (%)'),
-            tooltip=['Format', alt.Tooltip('CTR (%):Q', format='.2f'), alt.Tooltip('Time on Site (min):Q', format='.1f')]
-        ).properties(width=800, height=400, title='Video vs Static: Engagement Metrics').interactive()
-        
-        return chart
-    
-    # Audience segment performance
-    elif any(word in query_lower for word in ['audience', 'segment', 'underperforming', 'demographic', 'behavioral']):
-        data = df.groupby('Audience Segment (Demographic)').agg({
-            'ROAS': 'mean',
-            'CPA ($)': 'mean'
-        }).reset_index()
-        
-        base = alt.Chart(data).encode(x='Audience Segment (Demographic):N')
-        
-        roas_chart = base.mark_bar(color='#00d4ff').encode(
-            y=alt.Y('ROAS:Q', title='ROAS'),
-            tooltip=['Audience Segment (Demographic)', alt.Tooltip('ROAS:Q', format='.2f')]
-        )
-        
-        cpa_line = base.mark_line(point=True, color='#ef4444', size=3).encode(
-            y=alt.Y('CPA ($):Q', title='CPA ($)', axis=alt.Axis(orient='right')),
-            tooltip=['Audience Segment (Demographic)', alt.Tooltip('CPA ($):Q', format='$,.2f')]
-        )
-        
-        return alt.layer(roas_chart, cpa_line).resolve_scale(y='independent').properties(
-            width=800, height=400, title='Audience Segment Performance'
-        ).interactive()
-    
-    # Social vs Display ROAS drivers
-    elif any(word in query_lower for word in ['social', 'display', 'roas', 'driving']):
-        social_publishers = ['Meta', 'TikTok', 'LinkedIn']
-        display_publishers = ['NZ Herald', 'TVNZ']
-        
-        df_copy = df.copy()
-        df_copy['Channel Type'] = df_copy['Publisher'].apply(
-            lambda x: 'Social' if x in social_publishers else ('Display' if x in display_publishers else 'Other')
-        )
-        
-        data = df_copy[df_copy['Channel Type'].isin(['Social', 'Display'])].groupby('Channel Type').agg({
-            'ROAS': 'mean',
-            'CTR (%)': 'mean',
-            'Conversion Rate (%)': 'mean',
-            'Revenue ($)': 'sum'
-        }).reset_index()
-        
-        chart = alt.Chart(data).mark_bar(color='#ec4899').encode(
-            x='Channel Type:N',
-            y=alt.Y('ROAS:Q', title='Average ROAS'),
-            tooltip=['Channel Type', alt.Tooltip('ROAS:Q', format='.2f'), alt.Tooltip('CTR (%):Q', format='.2f')]
-        ).properties(width=800, height=400, title='Social vs Display: ROAS Comparison').interactive()
-        
-        return chart
-    
-    # Default fallback
+    if sel_tag:
+        source_posts = [p for p in top_posts_data if f"#{sel_tag}" in (p.get("text","") or "").lower()]
+        total_with_tag = len(source_posts)
+        st.markdown(f"**Showing {total_with_tag} posts with #{sel_tag}**")
     else:
-        data = df.groupby('Channel').agg({
-            'ROAS': 'mean'
-        }).reset_index().sort_values('ROAS', ascending=False).head(10)
-        
-        chart = alt.Chart(data).mark_bar(color='#00d4ff').encode(
-            x=alt.X('Channel:N', sort='-y'),
-            y=alt.Y('ROAS:Q', title='Average ROAS'),
-            tooltip=['Channel', alt.Tooltip('ROAS:Q', format='.2f')]
-        ).properties(width=800, height=400, title='Channel Performance by ROAS').interactive()
-        
-        return chart
+        source_posts = top_posts_data
 
-# -------------------------------
-# MAIN LAYOUT
-# -------------------------------
+    small_freq = Counter()
+    for p in source_posts:
+        for tag in extract_hashtags(p.get("text","")):
+            small_freq[tag.lstrip("#")] += 1
+    if not small_freq:
+        small_freq = dict(Counter(hashtag_counter).most_common(40) if isinstance(hashtag_counter, dict) else {"empty":1})
+    else:
+        small_freq = dict(small_freq.most_common(40))
 
-# Share button in top right
-col_title, col_share = st.columns([6, 1])
-with col_title:
-    st.title("")
-with col_share:
-    current_url = "https://dentsusolutions.com/"  # Update with your actual deployed URL
-    if st.button("🔗 Share", use_container_width=True):
-        st.code(current_url, language=None)
-        st.success("Link ready to share!")
+    # TRANSPARENT BACKGROUND
+    wc = WordCloud(width=600, height=240, max_font_size=60, background_color=None, mode="RGBA").generate_from_frequencies(small_freq)
+    fig, ax = plt.subplots(figsize=(6,2.4))
+    ax.imshow(wc, interpolation="bilinear")
+    ax.axis("off")
+    fig.patch.set_visible(False)
+    ax.set_frame_on(False)
+    plt.tight_layout(pad=0)
+    st.pyplot(fig, use_container_width=True)
 
-# DISPLAY PREVIOUS MESSAGES
+# ------------------------------
+# Explore Posts by Hashtag
+# ------------------------------
+with st.expander("🔍 Explore Posts by Hashtag (expand)"):
+    # Sort hashtags by count for this dropdown too
+    sorted_hashtags_explore = sorted(dict(hashtag_counter).items(), key=lambda x: x[1], reverse=True) if isinstance(hashtag_counter, dict) else []
+    explore_options = [""] + [f"#{tag} ({count} posts)" for tag, count in sorted_hashtags_explore]
+    
+    selected_tag_display = st.selectbox("Select a hashtag to explore", options=explore_options, key="explore_hashtag")
+    
+    # Extract just the tag name
+    selected_tag = ""
+    if selected_tag_display:
+        selected_tag = selected_tag_display.split(" (")[0].lstrip("#")
+    
+    if selected_tag:
+        filtered = [p for p in top_posts_data if f"#{selected_tag}" in (p.get("text","") or "").lower()]
+        st.markdown(f"Showing {len(filtered)} posts with #{selected_tag}")
+        for i, post in enumerate(filtered):
+            with st.expander(f"Post {i+1} — {post.get('sentiment')}, {post.get('emotion')}"):
+                cols = st.columns([1, 5])
+                with cols[0]:
+                    if post.get("avatar"):
+                        try:
+                            st.image(post.get("avatar"), width=72)
+                        except Exception:
+                            pass
+                with cols[1]:
+                    st.markdown(f"**Text:** {post.get('text')}")
+                    st.markdown(f"**Engagement:** 👍 {fmt_k(post.get('likes',0))} | 🔁 {fmt_k(post.get('shares',0))} | 💬 {fmt_k(post.get('comments',0))}")
+                    if post.get("music"):
+                        st.markdown(f"**Music:** {post.get('music')} — {post.get('music_author','')}")
+                    if post.get("url"):
+                        st.markdown(f"[Link to post]({safe_text(post.get('url'))})")
+
+# ------------------------------
+# Bottom section: Quick Questions + Chat Display & Input
+# ------------------------------
+
+st.divider()
+
+st.markdown("### 💡 Quick Questions")
+quick_qs = [
+    "📊 Generate 5 creative line options based on today's trends.",
+    "🎯 Give me a detailed summary of what people are experiencing this Christmas.",
+    "📉 Recap what the pain points are for everyone this Christmas.",
+]
+for q in quick_qs:
+    if st.button(q, use_container_width=True, key=f"quick_q_{q}"):
+        st.session_state.rerun_question = q
+        st.rerun()
+
+st.divider()
+
+st.markdown("### 💬 Chat")
+
+# Display conversation (exclude system prompt)
 for msg in st.session_state.chat_history:
-    if msg["role"] == "assistant":
+    role = msg.get("role", "assistant")
+    content = msg.get("content", "")
+    if role == "system":
+        continue  # Skip system prompt
+    if role == "assistant":
         with st.chat_message("assistant"):
-            st.markdown(msg["content"])
-    elif msg["role"] == "user":
+            st.markdown(content)
+    else:
         with st.chat_message("user"):
-            st.markdown(msg["content"])
+            st.markdown(content)
 
-# Check if rerunning from history
+# preserve preset rerun question logic
 preset_input = None
 if "rerun_question" in st.session_state:
     preset_input = st.session_state.rerun_question
     del st.session_state.rerun_question
 
-# Initialize chat started flag
-if "chat_started" not in st.session_state:
-    st.session_state.chat_started = False
-
-# Quick Questions (above chat input) - line by line in rectangular form
-# Only show if chat hasn't started
-if not st.session_state.chat_started:
-    st.markdown("### 💡 Quick Questions")
-    preset_questions = [
-        "💰 Recommend optimal channel mixes for $100M, $200M, and $300M investment levels.",
-        "📊 Determine which formats delivered the highest ROI.",
-        "🎯 Evaluate channels & publishers with the strongest click-to-conversion rates.",
-        "📉 Highlight months with the highest churn and distinguish internal vs. external drivers.",
-        "🎥 Is Video or Static driving higher engagement?",
-        "👥 Which audience segment is underperforming?",
-        "📱 What's driving ROAS on Social vs Display?"
-    ]
-
-    # Create centered container for questions
-    st.markdown('<div class="question-container">', unsafe_allow_html=True)
-    for question in preset_questions:
-        col = st.container()
-        with col:
-            if st.button(question, use_container_width=True, key=f"preset_{question}"):
-                preset_input = question
-                st.session_state.chat_started = True
-    st.markdown('</div>', unsafe_allow_html=True)
-else:
-    # Show questions in bottom left when chat has started
-    with st.sidebar:
-        st.divider()
-        st.subheader("💡 Quick Questions")
-        preset_questions = [
-            "💰 Recommend optimal channel mixes for $100M, $200M, and $300M investment levels.",
-            "📊 Determine which formats delivered the highest ROI.",
-            "🎯 Evaluate channels & publishers with the strongest click-to-conversion rates.",
-            "📉 Highlight months with the highest churn and distinguish internal vs. external drivers.",
-            "🎥 Is Video or Static driving higher engagement?",
-            "👥 Which audience segment is underperforming?",
-            "📱 What's driving ROAS on Social vs Display?"
-        ]
-        
-        for question in preset_questions:
-            if st.button(question, use_container_width=True, key=f"sidebar_preset_{question}"):
-                preset_input = question
-
-# CHAT INPUT
-user_input = st.chat_input("Select a prompt above or type your custom prompt here")
-
-# Use preset input if a button was clicked
+# Chat input
+user_input = st.chat_input("Type your question here")
 if preset_input:
     user_input = preset_input
 
 if user_input:
-    # Add to question history
+    # record in history
     if "question_history" not in st.session_state:
         st.session_state.question_history = []
-    
-    st.session_state.question_history.append({
-        "text": user_input,
-        "date": datetime.now().date(),
-        "timestamp": datetime.now().isoformat()
-    })
-    
+    st.session_state.question_history.append(
+        {"text": user_input, "date": datetime.now().date(), "timestamp": datetime.now().isoformat()}
+    )
     st.session_state.chat_history.append({"role": "user", "content": user_input})
+    
     with st.chat_message("user"):
         st.markdown(user_input)
 
     with st.chat_message("assistant"):
-        with st.spinner("Analysing performance..."):
+        with st.spinner("Analysing social data..."):
             try:
-                response = client.chat.completions.create(
-                    model="llama-3.1-8b-instant",
-                    messages=st.session_state.chat_history
-                )
-                output = response.choices[0].message.content
-                cleaned_output = clean_output(output)
-                st.markdown(cleaned_output)
-                
-                chart = generate_dynamic_chart(user_input, df)
-                st.altair_chart(chart, use_container_width=True)
-                
-                st.session_state.chat_history.append({"role": "assistant", "content": cleaned_output})
-            except Exception as e:
-                error_str = str(e).lower()
-                if "rate_limit" in error_str or "rate limit" in error_str or "429" in error_str:
-                    st.warning("⚠️ Too many messages sent. Please wait a moment and try again.")
+                if not client:
+                    st.error("Missing Groq client. Set GROQ_API_KEY in environment.")
                 else:
-                    st.error(f"Error from Groq API: {e}")
+                    response = client.chat.completions.create(model=GROQ_MODEL, messages=st.session_state.chat_history)
+                    output = response.choices[0].message.content
+                    cleaned_output = clean_output(output)
+                    st.markdown(cleaned_output)
+                    try:
+                        if "generate_dynamic_chart" in globals() and "df" in globals():
+                            chart = generate_dynamic_chart(user_input, df)
+                            if chart is not None:
+                                st.altair_chart(chart, use_container_width=True)
+                    except Exception:
+                        st.info("Chart generation failed (non-fatal).")
+                    st.session_state.chat_history.append({"role": "assistant", "content": cleaned_output})
+            except Exception as e:
+                err = str(e).lower()
+                if "rate_limit" in err or "429" in err:
+                    st.warning("⚠️ Too many requests. Please wait a moment and try again.")
+                else:
+                    st.error(f"An error occurred while contacting the model: {str(e)}")
 
-# -------------------------------
-# LEGAL DISCLAIMER
-# -------------------------------
+# Footer
 st.markdown("---")
-st.markdown("""
-<div style="background-color: #481d00; margin-bottom: 32px; padding: 16px; font-size: 14px; border-radius: 8px;">
-    <p style="margin: 0;">Legal Disclaimer — The insights and visualisations generated by this tool are for informational purposes only and should not be considered financial, legal, or business advice.</p>
-</div>
-""", unsafe_allow_html=True)
+st.markdown("Powered by Dentsu")
