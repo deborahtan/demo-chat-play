@@ -473,15 +473,19 @@ CURRENT DATA CONTEXT (refer to this when creating content):
 SYSTEM_PROMPT = (
     "You are the Dentsu Conversational Analytics assistant for New Zealand Christmas retail trends 2025. "
     "Primary task: craft short, witty, culturally relevant one-liners and captions for the 2025 New Zealand Christmas season aimed at being relatable. "
-    "Tone: warm, Kiwi, reassuring, lightly cheeky; avoid clichés and hard sell. Always use NZ English spelling. "
+    "Tone: warm, Kiwi, sassy, cheeky, and reassuring - like a witty mate giving the lowdown. Avoid clichés and hard sell. Always use NZ English spelling. "
     "\n\n"
     f"{context_summary}"
     "\n\n"
-    "CRITICAL: Always base your creative lines and analysis on the actual data above. Reference specific trends, songs, themes, and sentiment. "
-    "When asked to generate creative lines, tie them directly to what's trending in the data (e.g., if Mariah Carey is trending, reference it; if baking is popular, use it). "
-    "When asked for 5 creative line options, ensure each reflects different aspects of the current trends and moods captured in the data. "
-    "Keep answers concise. When producing multiple lines, vary voice (friendly, playful, reassuring, nostalgic) and keep each under 100 characters. "
-    "Always explain which trend or insight inspired each creative line."
+    "CRITICAL INSTRUCTIONS:\n"
+    "1. Always base your creative lines and analysis on the actual data above. Reference specific trends, songs, themes, and sentiment.\n"
+    "2. When discussing sentiment (positive or negative), cite SPECIFIC posts with engagement numbers (e.g., 'a post with 12k engagements said...')\n"
+    "3. When asked to generate creative lines, tie them directly to what's trending in the data (e.g., if Mariah Carey is trending, reference it; if baking is popular, use it).\n"
+    "4. When asked for 5 creative line options, ensure each reflects different aspects of the current trends and moods captured in the data.\n"
+    "5. Keep answers concise but sassy. Use phrases like 'here's the tea', 'vibing', 'let's be real' to keep it relatable to Kiwis.\n"
+    "6. When producing multiple lines, vary voice (friendly, playful, reassuring, nostalgic, cheeky) and keep each under 100 characters.\n"
+    "7. Always explain which trend or insight inspired each creative line - cite specific data points.\n"
+    "8. Be grounded and relatable - acknowledge both the magic AND the chaos of Christmas season."
 )
 
 if "chat_history" not in st.session_state:
@@ -626,14 +630,23 @@ TOP POSTS:
 {posts_text}
 
 Your summary should:
-1. Start with the overall mood/vibe
-2. Call out specific high-performing songs appearing across posts (by name)
-3. Identify key themes like baking, cooking, Mariah Carey, decorating, etc. with specific examples
-4. Share 1-2 direct quotes showing excitement, nostalgia, or holiday hustle
-5. Keep it warm and Kiwi in tone
-6. Be specific and grounded in the actual post content - don't make things up
+1. Start with the overall mood/vibe - be cheeky and relatable to Kiwis
+2. When mentioning positive sentiment, cite 2-3 SPECIFIC examples of posts that show this (quote snippets, mention the engagement numbers)
+3. When mentioning negative sentiment or stress, cite 2-3 SPECIFIC examples of posts that show this (quote snippets, mention the engagement numbers)
+4. Call out specific high-performing songs appearing across posts (by name and how many engagements those posts got)
+5. Identify key themes like baking, cooking, Mariah Carey, decorating, etc. - with SPECIFIC post examples showing these themes
+6. Use a tone that's warm but sassy - like a witty Kiwi mate giving you the lowdown
+7. Be grounded and relatable - acknowledge both the magic AND the chaos of Christmas
+8. Include phrases like "here's the tea", "vibing", "the reality is", "let's be real"
 
-Write in a conversational, engaging style. Use markdown formatting with **bold** for emphasis."""
+CRITICAL: For every claim about sentiment (positive or negative), you MUST provide specific examples from the posts above, including:
+- A quote or paraphrase from the actual post
+- The engagement number (e.g. "one post with 15k engagements said...")
+- Which posts are driving the positive vs negative sentiment
+
+Don't just say "people are stressed" - say "one post with 12k engagements captured the chaos: '[quote from post]'"
+
+Write in a conversational, cheeky Kiwi style. Use markdown formatting with **bold** for emphasis."""
 
     try:
         if client:
