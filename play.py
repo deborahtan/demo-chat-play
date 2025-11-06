@@ -518,8 +518,15 @@ SYSTEM_PROMPT = (
     "Use NZ English. Be cheeky but relatable. Reference the data constantly."
 )
 
+# Initialize or update chat history with current system prompt
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = [{"role": "system", "content": SYSTEM_PROMPT}]
+else:
+    # Always update the system prompt to ensure latest version is used
+    if len(st.session_state.chat_history) > 0 and st.session_state.chat_history[0].get("role") == "system":
+        st.session_state.chat_history[0]["content"] = SYSTEM_PROMPT
+    else:
+        st.session_state.chat_history.insert(0, {"role": "system", "content": SYSTEM_PROMPT})
 
 # Title + source
 st.markdown("## 🎄 NZ Christmas Retail Trendspotter")
@@ -652,23 +659,23 @@ def generate_spirit_summary_with_llm(posts_json, sentiment_dict, emotional_dict)
     dominant_emotion = max(emotional_dict.items(), key=lambda x: x[1])[0] if emotional_dict else "unclear"
     
     # Create LLM prompt
-    llm_prompt = f"""Write a 3-4 paragraph summary of NZ Christmas 2025 social media sentiment based on these actual posts.
+    llm_prompt = f"""Write a 3-4 paragraph summary of what's trending in NZ Christmas 2025 social media.
 
-Sentiment: {pos_pct:.0f}% positive, {neg_pct:.0f}% negative, dominant emotion: {dominant_emotion}
+Data shows: {pos_pct:.0f}% positive vibes, {neg_pct:.0f}% showing stress/chaos, dominant emotion: {dominant_emotion}
 
 TOP POSTS:
 {posts_text}
 
-Requirements:
-- Paragraph 1: Overall vibe - cite 1-2 specific posts with engagement numbers
-- Paragraph 2: Positive sentiment examples - cite specific posts showing joy/excitement 
-- Paragraph 3: Negative sentiment/stress examples - cite specific posts showing pressure/chaos
-- Paragraph 4: Key themes (songs, baking, decorating) with specific examples
-- Tone: Cheeky Kiwi mate - "here's the tea", "let's be real"
-- Cite actual post quotes and engagement numbers throughout
-- Use **bold** for emphasis
+Structure:
+- Paragraph 1: What's the overall Christmas vibe in NZ? Cite 1-2 specific posts with engagement numbers
+- Paragraph 2: What are people excited about? (songs, traditions, activities) - cite specific examples
+- Paragraph 3: What's stressing them out? (queues, budgets, logistics) - cite specific examples  
+- Paragraph 4: Key themes appearing across posts (baking, decorating, music, shopping)
 
-Write in conversational, cheeky Kiwi style."""
+Tone: Cheeky Kiwi mate giving the lowdown - "here's what's happening", "Kiwis are vibing on"
+DO NOT use the word "sentiment" - just talk about what people are posting about
+Cite actual post quotes and engagement numbers
+Use **bold** for emphasis"""
 
     try:
         if client:
