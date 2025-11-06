@@ -65,6 +65,16 @@ st.markdown(
         transform: translateY(-2px);
     }
 
+    /* Multi-line button support for sidebar */
+    .stSidebar button {
+        white-space: normal !important;
+        word-wrap: break-word !important;
+        height: auto !important;
+        min-height: 2.5rem !important;
+        padding: 0.5rem 1rem !important;
+        text-align: left !important;
+    }
+
     .big-num { font-size: 40px; font-weight:700; margin-bottom:2px; text-align:center; }
     .small-label { font-size:12px; color:#666; text-align:center; margin-top:0; }
     .scorecard-block { padding:8px 4px; }
@@ -84,13 +94,45 @@ with st.sidebar:
         st.session_state.question_history = []
         st.rerun()
     st.header("Dentsu Conversational Analytics: Trendspotter")
+    
     st.markdown(
         """
-    **How to use**
-    - Synthesises top posts across TikTok, Instagram and Meta and analyses sentiment
-    - Conversation context is remembered
+    **About the Tool**
+    
+    🎯 Get instant NZ Christmas insights from 500+ real social posts
+    
+    📊 Data-driven creative lines based on actual sentiment & trends  
+    
+    🎄 Understand what Kiwis are really feeling this festive season
+    
+    💡 Make confident campaign decisions backed by social data
     """
     )
+    
+    st.divider()
+    
+    st.markdown(
+        """
+    **How to Use**
+    
+    1️⃣ **Key Mentions** - View total posts and Christmas engagement at a glance
+    
+    2️⃣ **Christmas Spirit Summary** - AI-generated narrative of the festive mood
+    
+    3️⃣ **Emotion Summary** - Expand to see sentiment breakdown and top emojis
+    
+    4️⃣ **Top Posts** - Expand to browse highest-engagement content with links
+    
+    5️⃣ **Hashtag Cloud** - Expand to filter and explore trending hashtags
+    
+    6️⃣ **Explore by Hashtag** - Expand to dive deep into specific hashtag posts
+    
+    7️⃣ **Quick Questions** - Click preset prompts for instant insights
+    
+    8️⃣ **Chat** - Ask anything naturally - context is remembered across questions
+    """
+    )
+    
     st.divider()
     st.subheader("📋 Recent Questions")
     if "question_history" not in st.session_state:
@@ -102,13 +144,13 @@ with st.sidebar:
     if today_qs:
         st.markdown("**Today**")
         for q in reversed(today_qs[-5:]):
-            if st.button(q["text"][:50] + ("..." if len(q["text"]) > 50 else ""), key=f"today_{q['timestamp']}", use_container_width=True):
+            if st.button(q["text"], key=f"today_{q['timestamp']}", use_container_width=True):
                 st.session_state.rerun_question = q["text"]
                 st.rerun()
     if yesterday_qs:
         st.markdown("**Yesterday**")
         for q in reversed(yesterday_qs[-5:]):
-            if st.button(q["text"][:50] + ("..." if len(q["text"]) > 50 else ""), key=f"yesterday_{q['timestamp']}", use_container_width=True):
+            if st.button(q["text"], key=f"yesterday_{q['timestamp']}", use_container_width=True):
                 st.session_state.rerun_question = q["text"]
                 st.rerun()
 
@@ -728,7 +770,59 @@ for msg in st.session_state.chat_history:
         continue  # Skip system prompt
     if role == "assistant":
         with st.chat_message("assistant"):
-            st.markdown(content)
+            # Format numbered lists as styled elements
+            def format_response(text):
+                lines = text.split('\n')
+                formatted_lines = []
+                in_numbered_list = False
+                list_items = []
+                
+                for line in lines:
+                    # Check if line starts with a number followed by period or parenthesis
+                    if re.match(r'^\d+[\.)]\s+', line.strip()):
+                        in_numbered_list = True
+                        # Extract the number and content
+                        match = re.match(r'^(\d+)[\.)]\s+(.+)$', line.strip())
+                        if match:
+                            num, content_text = match.groups()
+                            list_items.append((num, content_text))
+                    elif in_numbered_list and line.strip() == '':
+                        # Empty line might indicate end of list
+                        continue
+                    elif in_numbered_list and not re.match(r'^\d+[\.)]\s+', line.strip()):
+                        # List ended, render collected items
+                        if list_items:
+                            for num, content_text in list_items:
+                                formatted_lines.append(
+                                    f"""<div style='padding: 12px 16px; margin: 8px 0; border-left: 3px solid #4CAF50; background-color: #1E1E1E; border-radius: 4px;'>
+                                    <span style='font-weight: 700; color: #4CAF50; font-size: 18px; margin-right: 12px;'>{num}.</span>
+                                    <span style='font-size: 14px;'>{content_text}</span>
+                                    </div>"""
+                                )
+                            list_items = []
+                            in_numbered_list = False
+                        formatted_lines.append(line)
+                    else:
+                        formatted_lines.append(line)
+                
+                # Handle case where list is at the end
+                if list_items:
+                    for num, content_text in list_items:
+                        formatted_lines.append(
+                            f"""<div style='padding: 12px 16px; margin: 8px 0; border-left: 3px solid #4CAF50; background-color: #1E1E1E; border-radius: 4px;'>
+                            <span style='font-weight: 700; color: #4CAF50; font-size: 18px; margin-right: 12px;'>{num}.</span>
+                            <span style='font-size: 14px;'>{content_text}</span>
+                            </div>"""
+                        )
+                
+                return '\n'.join(formatted_lines)
+            
+            # Check if response has numbered list
+            if re.search(r'^\d+[\.)]\s+', content, re.MULTILINE):
+                formatted_output = format_response(content)
+                st.markdown(formatted_output, unsafe_allow_html=True)
+            else:
+                st.markdown(content)
     else:
         with st.chat_message("user"):
             st.markdown(content)
@@ -765,7 +859,62 @@ if user_input:
                     response = client.chat.completions.create(model=GROQ_MODEL, messages=st.session_state.chat_history)
                     output = response.choices[0].message.content
                     cleaned_output = clean_output(output)
-                    st.markdown(cleaned_output)
+                    
+                    # Format numbered lists as individual styled elements
+                    def format_response(text):
+                        # Check if response contains numbered list (1. 2. 3. etc)
+                        lines = text.split('\n')
+                        formatted_lines = []
+                        in_numbered_list = False
+                        list_items = []
+                        
+                        for line in lines:
+                            # Check if line starts with a number followed by period or parenthesis
+                            if re.match(r'^\d+[\.)]\s+', line.strip()):
+                                in_numbered_list = True
+                                # Extract the number and content
+                                match = re.match(r'^(\d+)[\.)]\s+(.+)$', line.strip())
+                                if match:
+                                    num, content = match.groups()
+                                    list_items.append((num, content))
+                            elif in_numbered_list and line.strip() == '':
+                                # Empty line might indicate end of list
+                                continue
+                            elif in_numbered_list and not re.match(r'^\d+[\.)]\s+', line.strip()):
+                                # List ended, render collected items
+                                if list_items:
+                                    for num, content in list_items:
+                                        formatted_lines.append(
+                                            f"""<div style='padding: 12px 16px; margin: 8px 0; border-left: 3px solid #4CAF50; background-color: #1E1E1E; border-radius: 4px;'>
+                                            <span style='font-weight: 700; color: #4CAF50; font-size: 18px; margin-right: 12px;'>{num}.</span>
+                                            <span style='font-size: 14px;'>{content}</span>
+                                            </div>"""
+                                        )
+                                    list_items = []
+                                    in_numbered_list = False
+                                formatted_lines.append(line)
+                            else:
+                                formatted_lines.append(line)
+                        
+                        # Handle case where list is at the end
+                        if list_items:
+                            for num, content in list_items:
+                                formatted_lines.append(
+                                    f"""<div style='padding: 12px 16px; margin: 8px 0; border-left: 3px solid #4CAF50; background-color: #1E1E1E; border-radius: 4px;'>
+                                    <span style='font-weight: 700; color: #4CAF50; font-size: 18px; margin-right: 12px;'>{num}.</span>
+                                    <span style='font-size: 14px;'>{content}</span>
+                                    </div>"""
+                                )
+                        
+                        return '\n'.join(formatted_lines)
+                    
+                    # Check if response has numbered list
+                    if re.search(r'^\d+[\.)]\s+', cleaned_output, re.MULTILINE):
+                        formatted_output = format_response(cleaned_output)
+                        st.markdown(formatted_output, unsafe_allow_html=True)
+                    else:
+                        st.markdown(cleaned_output)
+                    
                     try:
                         if "generate_dynamic_chart" in globals() and "df" in globals():
                             chart = generate_dynamic_chart(user_input, df)
