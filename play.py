@@ -590,7 +590,11 @@ with st.expander("🔥 Emotion Summary (expand)"):
 st.subheader("🎄 Christmas Spirit Summary")
 
 @st.cache_data(show_spinner=False)
-def generate_spirit_summary_with_llm(posts, sentiment_counts, emotional_barometer):
+def generate_spirit_summary_with_llm(posts_json, sentiment_dict, emotional_dict):
+    # Convert JSON string back to list of dicts
+    import json
+    posts = json.loads(posts_json)
+    
     # Filter Christmas-related posts
     christmas_posts = [p for p in posts if "christmas" in safe_text(p.get("text", "")).lower()]
     
@@ -607,11 +611,11 @@ def generate_spirit_summary_with_llm(posts, sentiment_counts, emotional_baromete
     
     posts_text = "\n\n".join(post_samples)
     
-    # Calculate sentiment stats
-    total = sum(sentiment_counts.values()) or 1
-    pos_pct = sentiment_counts.get("positive", 0) / total * 100
-    neg_pct = sentiment_counts.get("negative", 0) / total * 100
-    dominant_emotion = max(emotional_barometer.items(), key=lambda x: x[1])[0] if emotional_barometer else "unclear"
+    # Calculate sentiment stats - sentiment_dict and emotional_dict are plain dicts now
+    total = sum(sentiment_dict.values()) or 1
+    pos_pct = sentiment_dict.get("positive", 0) / total * 100
+    neg_pct = sentiment_dict.get("negative", 0) / total * 100
+    dominant_emotion = max(emotional_dict.items(), key=lambda x: x[1])[0] if emotional_dict else "unclear"
     
     # Create LLM prompt
     llm_prompt = f"""Based on these top Christmas-related social media posts from New Zealand, write a 3-4 paragraph summary capturing the Christmas spirit. 
@@ -647,15 +651,17 @@ Write in a conversational, engaging style. Use markdown formatting with **bold**
         else:
             return f"**Overall vibe:** {pos_pct:.0f}% positive, {neg_pct:.0f}% negative, with **{dominant_emotion}** leading the charge.\n\nUnable to generate detailed summary - LLM client not available."
     except Exception as e:
-        st.warning(f"Could not generate LLM summary: {e}")
-        return f"**Overall vibe:** {pos_pct:.0f}% positive, {neg_pct:.0f}% negative, with **{dominant_emotion}** leading the charge.\n\nDetailed analysis unavailable."
+        return f"**Overall vibe:** {pos_pct:.0f}% positive, {neg_pct:.0f}% negative, with **{dominant_emotion}** leading the charge.\n\nDetailed analysis unavailable. Error: {str(e)}"
 
-# Convert dicts to tuples for hashability in caching
-sentiment_tuple = tuple(sorted(sentiment_counts.items()))
-emotional_tuple = tuple(sorted(emotional_barometer.items()))
+# Convert data to proper formats for caching
+import json
+posts_json = json.dumps(top_posts_data)
+# Explicitly convert Counter objects to regular dicts
+sentiment_dict = {k: v for k, v in sentiment_counts.items()}
+emotional_dict = {k: v for k, v in emotional_barometer.items()}
 
 with st.spinner("Generating Christmas spirit summary..."):
-    spirit_summary = generate_spirit_summary_with_llm(tuple(top_posts_data), sentiment_tuple, emotional_tuple)
+    spirit_summary = generate_spirit_summary_with_llm(posts_json, sentiment_dict, emotional_dict)
     st.markdown(spirit_summary)
 
 # ------------------------------
